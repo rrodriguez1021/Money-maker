@@ -140,6 +140,7 @@ $('#createBtn').onclick = async () => {
     body.colorDark = $('#colorDark').value;
     body.colorBg = $('#colorBg').value;
     body.logoShape = $('#logoShape')?.value || 'square';
+    const st = currentStyle(); if (st) body.style = st;
     const logo = await readLogoFile();
     if (logo) body.logo = logo;
   }
@@ -472,6 +473,7 @@ async function refreshPreview() {
     colorDark: $('#colorDark').value, colorBg: $('#colorBg').value,
     logoShape: $('#logoShape')?.value || 'square',
   };
+  const st = currentStyle(); if (st) body.style = st;
   if (previewLogo) body.logo = previewLogo;
   try {
     const res = await fetch('/api/qr/preview', {
@@ -485,9 +487,13 @@ async function refreshPreview() {
     const u = URL.createObjectURL(blob); img.src = u; img.dataset.url = u;
   } catch { /* ignore */ }
 }
+function currentStyle() {
+  if (!document.getElementById('gradOn')?.checked) return null;
+  return { gradient: { from: $('#gradFrom').value, to: $('#gradTo').value, type: $('#gradType').value, angle: 45 } };
+}
 function queuePreview() { clearTimeout(previewDeb); previewDeb = setTimeout(refreshPreview, 180); }
-['#colorDark', '#colorBg', '#target'].forEach((s) => document.querySelector(s)?.addEventListener('input', queuePreview));
-document.getElementById('logoShape')?.addEventListener('change', refreshPreview);
+['#colorDark', '#colorBg', '#target', '#gradFrom', '#gradTo'].forEach((s) => document.querySelector(s)?.addEventListener('input', queuePreview));
+['#logoShape', '#gradType', '#gradOn'].forEach((s) => document.querySelector(s)?.addEventListener('change', refreshPreview));
 document.getElementById('logoInput')?.addEventListener('change', async () => { previewLogo = await readLogoFile(); refreshPreview(); });
 
 // Read the selected logo PNG as a data URL (or null if none / too big).

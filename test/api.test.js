@@ -438,6 +438,33 @@ test('QR preview endpoint renders PNG and gates branding to plan', async () => {
   assert.equal(qr.headers.get('content-type'), 'image/png');
 });
 
+test('gradient style is gated to Business, persisted, and applied', async () => {
+  // Free plan: style is ignored.
+  const free = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'gradfree@example.com' }),
+  }).then(j);
+  const FH = { 'Content-Type': 'application/json', Authorization: `Bearer ${free.token}` };
+  const fl = await fetch(`${base}/api/links`, { method: 'POST', headers: FH, body: JSON.stringify({ target: 'example.com/a', style: { gradient: { from: '#ff0000', to: '#0000ff' } } }) }).then(j);
+  assert.equal(fl.qr_style, null, 'free plan cannot set a gradient');
+
+  // Business: persisted + QR renders.
+  const biz = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'gradbiz@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(biz.token).id, 'business');
+  const BH = { 'Content-Type': 'application/json', Authorization: `Bearer ${biz.token}` };
+  const bl = await fetch(`${base}/api/links`, { method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/b', style: { gradient: { from: '#7c8cff', to: '#22e0d0', type: 'radial' } } }) }).then(j);
+  assert.ok(bl.qr_style && JSON.parse(bl.qr_style).gradient.type === 'radial');
+  const svg = await fetch(`${base}/api/links/${bl.id}/qr.svg?token=${biz.token}`).then((r) => r.text());
+  assert.match(svg, /radialGradient id="qg"/);
+
+  // Invalid gradient hex → ignored (no style stored).
+  const bad = await fetch(`${base}/api/links`, { method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/c', style: { gradient: { from: 'red', to: '#0000ff' } } }) }).then(j);
+  assert.equal(bad.qr_style, null);
+});
+
 test('account deletion erases account, links and scans (GDPR)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

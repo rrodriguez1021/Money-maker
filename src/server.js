@@ -16,7 +16,7 @@ import {
   createLink, findLink, listLinks, countLinks, updateLink, deleteLink, setLinkPage, setLinkLogo,
   recordScan, countScans, recentScans, dailyScans, deleteAccount,
   createApiKey, listApiKeys, findApiKeyByHash, revokeApiKey, touchApiKey,
-  findAccountByRefCode, setReferredBy, setRefCode, countReferrals,
+  findAccountByRefCode, setReferredBy, setRefCode, countReferrals, setLinkStyle,
 } from './db.js';
 import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
@@ -183,6 +183,8 @@ app.post('/api/links', auth, (req, res) => {
   if (req.body.logo && planLimit(req.account.plan).branding && isValidLogo(req.body.logo)) {
     setLinkLogo(link.id, req.account.id, req.body.logo, req.body.logoShape === 'circle' ? 'circle' : 'square');
   }
+  const style = qrStyle(req.body, req.account.plan);
+  if (style) setLinkStyle(link.id, req.account.id, JSON.stringify(style));
   res.status(201).json({ ...stripLogo(findLink(link.id)), active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
 });
 
@@ -242,6 +244,11 @@ app.put('/api/links/:id', auth, (req, res) => {
       if (!isValidLogo(req.body.logo)) return res.status(400).json({ error: 'invalid_logo', hint: 'Logo must be a PNG under 300KB.' });
       setLinkLogo(link.id, req.account.id, req.body.logo, req.body.logoShape === 'circle' ? 'circle' : 'square');
     }
+  }
+
+  if (req.body.style !== undefined) {
+    const style = qrStyle(req.body, req.account.plan);
+    setLinkStyle(link.id, req.account.id, style ? JSON.stringify(style) : null);
   }
 
   updateLink(link.id, req.account.id, title, target, active, colorDark, colorBg);
@@ -314,6 +321,7 @@ app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
     opts.color = { dark: link.color_dark || '#000000', light: link.color_bg || '#ffffff' };
   }
   if (branding && link.logo) { opts.logo = link.logo; opts.logoShape = link.logo_shape || 'square'; }
+  if (branding && link.qr_style) { try { const st = JSON.parse(link.qr_style); if (st.gradient) opts.gradient = st.gradient; } catch { /* ignore */ } }
   try {
     if (req.params.fmt === 'svg') {
       res.type('image/svg+xml').send(await qrSvg(url, opts));
@@ -336,6 +344,8 @@ app.post('/api/qr/preview', auth, async (req, res) => {
     opts.logo = req.body.logo;
     opts.logoShape = req.body.logoShape === 'circle' ? 'circle' : 'square';
   }
+  const style = qrStyle(req.body, req.account.plan);
+  if (style && style.gradient) opts.gradient = style.gradient;
   try {
     res.type('image/png').send(await qrPng(text, opts));
   } catch {
@@ -443,6 +453,24 @@ function stripLogo(l) {
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+// Sanitize extra QR styling (currently a gradient), branding-gated. Returns an
+// object or null. Built to grow (module/eye shapes) without changing the schema.
+function qrStyle(body, plan) {
+  if (!planLimit(plan).branding) return null;
+  const s = body && body.style;
+  if (!s || typeof s !== 'object') return null;
+  const out = {};
+  if (s.gradient && HEX.test(s.gradient.from || '') && HEX.test(s.gradient.to || '')) {
+    const angle = Number(s.gradient.angle);
+    out.gradient = {
+      from: s.gradient.from, to: s.gradient.to,
+      type: s.gradient.type === 'radial' ? 'radial' : 'linear',
+      angle: Number.isFinite(angle) ? Math.max(0, Math.min(360, angle)) : 45,
+    };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // Returns sanitized brand colors, but only if the plan allows branding; otherwise
 // both are null (so non-Business accounts always get the default black-on-white code).
 function brandColors(body, plan) {

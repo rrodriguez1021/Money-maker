@@ -57,6 +57,14 @@
         <div><label>Background</label><input id="colorBg" type="color" value="#ffffff" style="width:54px;height:42px;padding:4px" /></div>
         <div><label>Center logo (PNG)</label><input id="logoInput" type="file" accept="image/png" style="padding:8px" /></div>
         <div><label>Logo shape</label><select id="logoShape" style="width:auto"><option value="square">Square</option><option value="circle">Circle</option></select></div>
+        <div><label>Gradient</label>
+          <span style="display:flex;gap:6px;align-items:center">
+            <input type="checkbox" id="gradOn" style="width:auto;height:18px" />
+            <input type="color" id="gradFrom" value="#7c8cff" style="width:38px;height:38px;padding:3px" />
+            <input type="color" id="gradTo" value="#22e0d0" style="width:38px;height:38px;padding:3px" />
+            <select id="gradType" style="width:auto"><option value="linear">Linear</option><option value="radial">Radial</option></select>
+          </span>
+        </div>
         <div class="qr-preview"><label>Preview</label><img id="qrPreview" alt="QR preview" /></div>
         <span class="pill pro">Business · branded codes</span>
       </div>

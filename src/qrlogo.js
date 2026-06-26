@@ -60,12 +60,59 @@ function inRoundedRect(x, y, rx, ry, w, h, r) {
   return (x - cxp) ** 2 + (y - cyp) ** 2 <= r * r;
 }
 
-export async function qrPng(text, { width = 512, color, logo, logoShape = 'square' } = {}) {
+// A pixel-color function for a fill across a W×W image.
+function pixelFill(gradient, W) {
+  const from = hexToRgb(gradient.from), to = hexToRgb(gradient.to);
+  const mix = (t) => { t = Math.max(0, Math.min(1, t)); return [
+    Math.round(from[0] + (to[0] - from[0]) * t),
+    Math.round(from[1] + (to[1] - from[1]) * t),
+    Math.round(from[2] + (to[2] - from[2]) * t)]; };
+  if (gradient.type === 'radial') {
+    const cx = W / 2, cy = W / 2, R = W * 0.72;
+    return (x, y) => mix(Math.hypot(x - cx, y - cy) / R);
+  }
+  const a = ((gradient.angle ?? 45) * Math.PI) / 180, dx = Math.cos(a), dy = Math.sin(a);
+  const span = W * (Math.abs(dx) + Math.abs(dy));
+  return (x, y) => mix((x * dx + y * dy) / span + (dx < 0 || dy < 0 ? 1 : 0));
+}
+// Recolor the dark modules of a solid black/white QR with a gradient.
+function applyGradient(png, gradient) {
+  const fn = pixelFill(gradient, png.width);
+  const d = png.data;
+  for (let y = 0; y < png.height; y++) {
+    for (let x = 0; x < png.width; x++) {
+      const i = (png.width * y + x) << 2;
+      if (d[i] < 110 && d[i + 1] < 110 && d[i + 2] < 110) {
+        const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2];
+      }
+    }
+  }
+}
+function gradientDefs(id, g) {
+  const stops = `<stop offset="0%" stop-color="${g.from}"/><stop offset="100%" stop-color="${g.to}"/>`;
+  if (g.type === 'radial') return `<defs><radialGradient id="${id}">${stops}</radialGradient></defs>`;
+  const a = ((g.angle ?? 45) * Math.PI) / 180;
+  const x1 = (0.5 - Math.cos(a) / 2).toFixed(3), y1 = (0.5 - Math.sin(a) / 2).toFixed(3);
+  const x2 = (0.5 + Math.cos(a) / 2).toFixed(3), y2 = (0.5 + Math.sin(a) / 2).toFixed(3);
+  return `<defs><linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${stops}</linearGradient></defs>`;
+}
+
+export async function qrPng(text, { width = 512, color, logo, logoShape = 'square', gradient } = {}) {
   const ecc = logo ? 'H' : 'M';
-  const buf = await QRCode.toBuffer(text, { width, margin: 1, errorCorrectionLevel: ecc, color });
-  const decoded = logo && decodeLogo(logo);
-  if (!decoded) return buf;
-  const base = PNG.sync.read(buf);
+  const light = (color && color.light) || '#ffffff';
+  let base;
+  if (gradient) {
+    const buf = await QRCode.toBuffer(text, { width, margin: 1, errorCorrectionLevel: ecc, color: { dark: '#000000', light } });
+    base = PNG.sync.read(buf);
+    applyGradient(base, gradient);
+    if (!logo) return PNG.sync.write(base);
+  } else {
+    const buf = await QRCode.toBuffer(text, { width, margin: 1, errorCorrectionLevel: ecc, color });
+    if (!logo) return buf;
+    base = PNG.sync.read(buf);
+  }
+  const decoded = decodeLogo(logo);
+  if (!decoded) return PNG.sync.write(base);
   const size = Math.round(width * 0.22);
   const pad = Math.round(size * 0.16);
   const box = size + pad * 2;
@@ -73,7 +120,7 @@ export async function qrPng(text, { width = 512, color, logo, logoShape = 'squar
   const circle = logoShape === 'circle';
   const cx = off + box / 2, cy = off + box / 2, R = box / 2;
   const corner = Math.round(box * 0.2);
-  const ring = hexToRgb((color && color.dark) || '#0b0d17');
+  const ring = hexToRgb((color && color.dark) || (gradient && gradient.to) || '#0b0d17');
   const ringW = Math.max(2, box * 0.045);
   const setPx = (x, y, r, g, b) => { const i = (width * y + x) << 2; base.data[i] = r; base.data[i + 1] = g; base.data[i + 2] = b; base.data[i + 3] = 255; };
   // Knockout + ring.
@@ -108,9 +155,15 @@ export async function qrPng(text, { width = 512, color, logo, logoShape = 'squar
   return PNG.sync.write(base);
 }
 
-export async function qrSvg(text, { width = 512, color, logo, logoShape = 'square' } = {}) {
+export async function qrSvg(text, { width = 512, color, logo, logoShape = 'square', gradient } = {}) {
   const ecc = logo ? 'H' : 'M';
-  const svg = await QRCode.toString(text, { type: 'svg', width, margin: 1, errorCorrectionLevel: ecc, color });
+  let svg;
+  if (gradient) {
+    svg = await QRCode.toString(text, { type: 'svg', width, margin: 1, errorCorrectionLevel: ecc, color: { dark: '#000000', light: (color && color.light) || '#ffffff' } });
+    svg = svg.replace(/(<svg[^>]*>)/, `$1${gradientDefs('qg', gradient)}`).replace('stroke="#000000"', 'stroke="url(#qg)"');
+  } else {
+    svg = await QRCode.toString(text, { type: 'svg', width, margin: 1, errorCorrectionLevel: ecc, color });
+  }
   if (!logo || !DATA_PNG.test(logo)) return svg;
   const vb = /viewBox="0 0 (\d+) (\d+)"/.exec(svg);
   const N = vb ? Number(vb[1]) : width;       // QR coordinate system is in module units

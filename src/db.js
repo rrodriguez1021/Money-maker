@@ -76,6 +76,8 @@ ensureColumn('links', 'page_json', 'TEXT');
 ensureColumn('links', 'logo', 'TEXT');
 // Logo knockout shape: 'square' (default) or 'circle'.
 ensureColumn('links', 'logo_shape', 'TEXT');
+// Extra QR styling as JSON (gradient, module shape, eye shape) — Business tier.
+ensureColumn('links', 'qr_style', 'TEXT');
 
 // Plan limits — the core monetization lever. Adding the Business tier (branded
 // QR colors) lifts revenue per customer: $9 Pro → $29 Business.
@@ -149,6 +151,10 @@ export const setLinkPage = (id, accountId, pageJson) => setPageStmt.run(pageJson
 // Set/clear the center logo (PNG data URL or null) and its knockout shape.
 const setLogoStmt = db.prepare(`UPDATE links SET logo = ?, logo_shape = ? WHERE id = ? AND account_id = ?`);
 export const setLinkLogo = (id, accountId, logo, shape = 'square') => setLogoStmt.run(logo, shape, id, accountId);
+
+// Set/clear extra QR styling (gradient/module/eye) as a JSON string or null.
+const setStyleStmt = db.prepare(`UPDATE links SET qr_style = ? WHERE id = ? AND account_id = ?`);
+export const setLinkStyle = (id, accountId, styleJson) => setStyleStmt.run(styleJson, id, accountId);
 
 // --- API keys (programmatic access). Only the sha256 hash is stored. ---
 const insertApiKey = db.prepare(

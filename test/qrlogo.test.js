@@ -44,6 +44,26 @@ test('circular logo renders (PNG decodes) and SVG uses a circular clip + ring', 
   assert.match(svg, /<circle[^>]+stroke="#112233"/);
 });
 
+test('gradient fill: PNG recolors dark modules; SVG injects a gradient def', async () => {
+  const grad = { from: '#ff0000', to: '#0000ff', type: 'linear', angle: 45 };
+  const png = PNG.sync.read(await qrPng('https://example.com/x', { width: 240, gradient: grad }));
+  // Scan for a pixel that is neither pure black, pure white, nor a primary endpoint —
+  // i.e. an interpolated gradient colour somewhere across the modules.
+  let blended = false;
+  for (let i = 0; i < png.data.length; i += 4) {
+    const r = png.data[i], g = png.data[i + 1], b = png.data[i + 2];
+    if (r > 20 && r < 235 && b > 20 && b < 235 && g < 60) { blended = true; break; }
+  }
+  assert.ok(blended, 'found an interpolated gradient pixel');
+
+  const svg = await qrSvg('https://example.com/x', { width: 240, gradient: grad });
+  assert.match(svg, /<linearGradient id="qg"/);
+  assert.match(svg, /stroke="url\(#qg\)"/);
+
+  const radial = await qrSvg('https://example.com/x', { width: 240, gradient: { ...grad, type: 'radial' } });
+  assert.match(radial, /<radialGradient id="qg"/);
+});
+
 test('qrSvg injects an <image> overlay only when a logo is provided', async () => {
   const plain = await qrSvg('https://example.com/x', { width: 300 });
   assert.ok(!plain.includes('<image'));
