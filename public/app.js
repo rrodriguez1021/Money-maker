@@ -372,18 +372,19 @@ async function loadLinks() {
       ? `<button class="btn btn-sm" data-act="editpage">Edit page</button><a class="btn btn-sm" href="${l.shortUrl}" target="_blank">Open</a>`
       : `<button class="btn btn-sm" data-act="edit">Edit dest</button>`;
     const el = document.createElement('div');
-    el.className = 'link-item';
+    el.className = 'link-item' + (l.active ? '' : ' paused');
     el.dataset.search = `${l.title || ''} ${l.target || ''} ${l.shortUrl}`.toLowerCase();
     el.innerHTML = `
       <div class="qr-wrap"><img class="link-qr" alt="QR" src="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" /><span class="qr-sheen"></span></div>
       <div class="link-main">
-        <h4>${escapeHtml(l.title || '(untitled)')}</h4>
+        <h4>${escapeHtml(l.title || '(untitled)')}${l.active ? '' : ' <span class="pill paused-pill">paused</span>'}</h4>
         <div class="small">QR → <span class="short">${l.shortUrl.replace(/^https?:\/\//, '')}</span></div>
         ${destLine}
       </div>
       <div style="text-align:center">
         <div class="scan-count">${l.scans}</div>
         <div class="small">scans</div>
+        <div class="small" style="margin-top:2px">${l.scans ? timeAgo(l.lastScan) : '—'}</div>
       </div>
       <div class="link-actions">
         ${editAction}
@@ -391,10 +392,16 @@ async function loadLinks() {
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.png?size=1024&token=${encodeURIComponent(token)}" download="qr-${l.id}-hd.png">HD</a>
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?token=${encodeURIComponent(token)}" download="qr-${l.id}.svg">SVG</a>
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?frame=scanme&token=${encodeURIComponent(token)}" target="_blank">Poster</a>
+        <button class="btn btn-sm" data-act="toggle">${l.active ? 'Pause' : 'Resume'}</button>
         <button class="btn btn-sm" data-act="dup">Dup</button>
         <button class="btn btn-sm" data-act="stats">Stats</button>
         <button class="btn btn-sm" data-act="del">✕</button>
       </div>`;
+    el.querySelector('[data-act=toggle]').onclick = (e) => withBusy(e.currentTarget, async () => {
+      await api('/api/links/' + l.id, { method: 'PUT', body: JSON.stringify({ active: !l.active }) });
+      toast(l.active ? 'Paused — the code now shows a 404' : 'Resumed');
+      await loadLinks();
+    });
     // Click the short URL to copy it.
     const shortEl = el.querySelector('.short');
     if (shortEl) {
@@ -613,6 +620,16 @@ function readLogoFile() {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function timeAgo(ts) {
+  if (!ts) return '—';
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24); if (d < 30) return d + 'd ago';
+  return Math.floor(d / 30) + 'mo ago';
 }
 
 // Esc closes any open inline editor (stats / page editor) when the palette isn't open.

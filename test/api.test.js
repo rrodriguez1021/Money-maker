@@ -283,6 +283,30 @@ test('billing portal requires billing + a stripe customer', async () => {
   assert.equal(res.status, 503);
 });
 
+test('pausing a code makes it 404; resuming restores the redirect; lastScan reported', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'pause@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const link = await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/p' }) }).then(j);
+
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual' }); // one scan
+  let list = await fetch(`${base}/api/links?token=${token}`).then(j);
+  assert.equal(list.links[0].active, true);
+  assert.ok(list.links[0].lastScan > 0, 'lastScan timestamp present');
+
+  // Pause → 404.
+  await fetch(`${base}/api/links/${link.id}`, { method: 'PUT', headers: H, body: JSON.stringify({ active: false }) }).then(j);
+  assert.equal((await fetch(`${base}/r/${link.id}`, { redirect: 'manual' })).status, 404);
+  list = await fetch(`${base}/api/links?token=${token}`).then(j);
+  assert.equal(list.links[0].active, false);
+
+  // Resume → 302 again.
+  await fetch(`${base}/api/links/${link.id}`, { method: 'PUT', headers: H, body: JSON.stringify({ active: true }) }).then(j);
+  assert.equal((await fetch(`${base}/r/${link.id}`, { redirect: 'manual' })).status, 302);
+});
+
 test('duplicate copies a code (destination, title, style) and respects the cap', async () => {
   const biz = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

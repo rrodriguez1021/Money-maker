@@ -14,7 +14,7 @@ import {
   createAccount, findAccountByToken, findAccountByEmail, findAccountById,
   setPlan, setPlanForCustomer, planLimit,
   createLink, findLink, listLinks, countLinks, updateLink, deleteLink, setLinkPage, setLinkLogo,
-  recordScan, countScans, recentScans, dailyScans, deleteAccount,
+  recordScan, countScans, lastScanAt, recentScans, dailyScans, deleteAccount,
   createApiKey, listApiKeys, findApiKeyByHash, revokeApiKey, touchApiKey,
   findAccountByRefCode, setReferredBy, setRefCode, countReferrals, setLinkStyle,
   recordPageClick, clicksByButton,
@@ -144,7 +144,8 @@ app.get('/api/me', auth, (req, res) => {
 // --- Links CRUD ---
 app.get('/api/links', auth, (req, res) => {
   const links = listLinks(req.account.id).map((l) => ({
-    ...stripLogo(l), active: !!l.active, scans: countScans(l.id), shortUrl: `${baseUrl(req)}/r/${l.id}`,
+    ...stripLogo(l), active: !!l.active, scans: countScans(l.id), lastScan: lastScanAt(l.id),
+    shortUrl: `${baseUrl(req)}/r/${l.id}`,
   }));
   res.json({ links });
 });

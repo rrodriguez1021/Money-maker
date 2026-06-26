@@ -229,5 +229,7 @@ const clicksByBtnStmt = db.prepare(`SELECT btn, COUNT(*) AS n FROM page_clicks W
 export const recordPageClick = (linkId, btn, ts) => insertClick.run(linkId, btn, ts);
 export const clicksByButton = (linkId) => clicksByBtnStmt.all(linkId);
 export const countScans = (linkId) => countScansStmt.get(linkId).n;
+const lastScanStmt = db.prepare(`SELECT MAX(ts) AS ts FROM scans WHERE link_id = ?`);
+export const lastScanAt = (linkId) => lastScanStmt.get(linkId).ts;
 export const recentScans = (linkId, limit = 25) => recentScansStmt.all(linkId, limit);
 export const dailyScans = (linkId, sinceTs) => dailyScansStmt.all(linkId, sinceTs);
