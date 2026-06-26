@@ -1,0 +1,114 @@
+// DynaQR data layer — uses Node's built-in SQLite (node:sqlite, Node >= 22.5).
+// Single-file database so the app runs anywhere with zero external services.
+import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+
+const DB_PATH = process.env.DB_PATH || './data/dynaqr.db';
+mkdirSync(dirname(DB_PATH), { recursive: true });
+
+export const db = new DatabaseSync(DB_PATH);
+
+db.exec(`
+  PRAGMA journal_mode = WAL;
+
+  CREATE TABLE IF NOT EXISTS accounts (
+    id          TEXT PRIMARY KEY,
+    email       TEXT UNIQUE NOT NULL,
+    token       TEXT UNIQUE NOT NULL,
+    plan        TEXT NOT NULL DEFAULT 'free',
+    stripe_customer TEXT,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS links (
+    id          TEXT PRIMARY KEY,        -- short code used in /r/:id
+    account_id  TEXT NOT NULL,
+    title       TEXT NOT NULL DEFAULT '',
+    target      TEXT NOT NULL,           -- destination URL (editable any time)
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  INTEGER NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS scans (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id     TEXT NOT NULL,
+    ts          INTEGER NOT NULL,
+    referrer    TEXT,
+    user_agent  TEXT,
+    FOREIGN KEY (link_id) REFERENCES links(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_links_account ON links(account_id);
+  CREATE INDEX IF NOT EXISTS idx_scans_link ON scans(link_id);
+`);
+
+// Plan limits — the core monetization lever.
+export const PLAN_LIMITS = {
+  free: { maxLinks: 3, analytics: false, label: 'Free' },
+  pro:  { maxLinks: Infinity, analytics: true, label: 'Pro' },
+};
+
+export function planLimit(plan) {
+  return PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+}
+
+// --- Accounts ---
+const insertAccount = db.prepare(
+  `INSERT INTO accounts (id, email, token, plan, created_at) VALUES (?, ?, ?, 'free', ?)`
+);
+const getAccountByToken = db.prepare(`SELECT * FROM accounts WHERE token = ?`);
+const getAccountByEmail = db.prepare(`SELECT * FROM accounts WHERE email = ?`);
+const getAccountById = db.prepare(`SELECT * FROM accounts WHERE id = ?`);
+const setPlanStmt = db.prepare(`UPDATE accounts SET plan = ?, stripe_customer = COALESCE(?, stripe_customer) WHERE id = ?`);
+const setPlanByCustomer = db.prepare(`UPDATE accounts SET plan = ? WHERE stripe_customer = ?`);
+
+export function createAccount(id, email, token, now) {
+  insertAccount.run(id, email, token, now);
+  return getAccountByToken.get(token);
+}
+export const findAccountByToken = (token) => (token ? getAccountByToken.get(token) : undefined);
+export const findAccountByEmail = (email) => getAccountByEmail.get(email);
+export const findAccountById = (id) => getAccountById.get(id);
+export const setPlan = (accountId, plan, stripeCustomer = null) => setPlanStmt.run(plan, stripeCustomer, accountId);
+export const setPlanForCustomer = (customerId, plan) => setPlanByCustomer.run(plan, customerId);
+
+// --- Links ---
+const insertLink = db.prepare(
+  `INSERT INTO links (id, account_id, title, target, created_at) VALUES (?, ?, ?, ?, ?)`
+);
+const getLink = db.prepare(`SELECT * FROM links WHERE id = ?`);
+const listLinksStmt = db.prepare(`SELECT * FROM links WHERE account_id = ? ORDER BY created_at DESC`);
+const countLinksStmt = db.prepare(`SELECT COUNT(*) AS n FROM links WHERE account_id = ?`);
+const updateLinkStmt = db.prepare(`UPDATE links SET title = ?, target = ?, active = ? WHERE id = ? AND account_id = ?`);
+const deleteLinkStmt = db.prepare(`DELETE FROM links WHERE id = ? AND account_id = ?`);
+
+export function createLink(id, accountId, title, target, now) {
+  insertLink.run(id, accountId, title, target, now);
+  return getLink.get(id);
+}
+export const findLink = (id) => getLink.get(id);
+export const listLinks = (accountId) => listLinksStmt.all(accountId);
+export const countLinks = (accountId) => countLinksStmt.get(accountId).n;
+export const updateLink = (id, accountId, title, target, active) =>
+  updateLinkStmt.run(title, target, active ? 1 : 0, id, accountId);
+export const deleteLink = (id, accountId) => deleteLinkStmt.run(id, accountId);
+
+// --- Scans ---
+const insertScan = db.prepare(
+  `INSERT INTO scans (link_id, ts, referrer, user_agent) VALUES (?, ?, ?, ?)`
+);
+const countScansStmt = db.prepare(`SELECT COUNT(*) AS n FROM scans WHERE link_id = ?`);
+const recentScansStmt = db.prepare(`SELECT * FROM scans WHERE link_id = ? ORDER BY ts DESC LIMIT ?`);
+const dailyScansStmt = db.prepare(`
+  SELECT CAST(ts / 86400000 AS INTEGER) AS day, COUNT(*) AS n
+  FROM scans WHERE link_id = ? AND ts >= ?
+  GROUP BY day ORDER BY day ASC
+`);
+
+export const recordScan = (linkId, ts, referrer, userAgent) =>
+  insertScan.run(linkId, ts, referrer || null, userAgent || null);
+export const countScans = (linkId) => countScansStmt.get(linkId).n;
+export const recentScans = (linkId, limit = 25) => recentScansStmt.all(linkId, limit);
+export const dailyScans = (linkId, sinceTs) => dailyScansStmt.all(linkId, sinceTs);

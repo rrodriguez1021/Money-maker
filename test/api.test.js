@@ -1,0 +1,98 @@
+// End-to-end smoke test of the DynaQR API. Runs against a real in-memory-ish DB
+// (a temp file) and a live HTTP server. No external services required.
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const dir = mkdtempSync(join(tmpdir(), 'dynaqr-'));
+process.env.DB_PATH = join(dir, 'test.db');
+
+const { app } = await import('../src/server.js');
+let server, base;
+
+before(async () => {
+  await new Promise((r) => { server = app.listen(0, r); });
+  base = `http://127.0.0.1:${server.address().port}`;
+});
+after(() => { server.close(); rmSync(dir, { recursive: true, force: true }); });
+
+const j = (res) => res.json();
+
+test('signup issues a token', async () => {
+  const r = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'a@example.com' }),
+  }).then(j);
+  assert.ok(r.token, 'token returned');
+  assert.equal(r.plan, 'free');
+});
+
+test('rejects invalid email', async () => {
+  const res = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'nope' }),
+  });
+  assert.equal(res.status, 400);
+});
+
+test('full link lifecycle: create, redirect+scan, edit, stats gating', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'lifecycle@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+
+  // create
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/first', title: 'Menu' }),
+  }).then(j);
+  assert.ok(link.id);
+  assert.equal(link.target, 'https://example.com/first');
+
+  // scan via redirect (manual: don't follow)
+  const redirect = await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
+  assert.equal(redirect.status, 302);
+  assert.equal(redirect.headers.get('location'), 'https://example.com/first');
+
+  // edit destination — the printed QR now points elsewhere
+  await fetch(`${base}/api/links/${link.id}`, {
+    method: 'PUT', headers: H, body: JSON.stringify({ target: 'example.com/updated' }),
+  }).then(j);
+  const after = await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
+  assert.equal(after.headers.get('location'), 'https://example.com/updated');
+
+  // QR png renders
+  const qr = await fetch(`${base}/api/links/${link.id}/qr.png?token=${token}`);
+  assert.equal(qr.headers.get('content-type'), 'image/png');
+  assert.ok(Number(qr.headers.get('content-length')) > 100);
+
+  // analytics is gated for free plan
+  const stats = await fetch(`${base}/api/links/${link.id}/stats`, { headers: H });
+  assert.equal(stats.status, 402, 'free plan blocked from analytics');
+
+  // scans counted on the link list
+  const { links } = await fetch(`${base}/api/links?token=${token}`).then(j);
+  assert.equal(links[0].scans, 2);
+});
+
+test('free plan enforces the 3-code limit', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'limit@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  for (let i = 0; i < 3; i++) {
+    const r = await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: `example.com/${i}` }) });
+    assert.equal(r.status, 201);
+  }
+  const blocked = await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/4' }) });
+  assert.equal(blocked.status, 402);
+  assert.equal((await blocked.json()).error, 'limit_reached');
+});
+
+test('unauthorized without token', async () => {
+  const res = await fetch(`${base}/api/links`);
+  assert.equal(res.status, 401);
+});

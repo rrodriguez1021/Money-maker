@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DynaQR — Dashboard</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="/">◧ DynaQR</a>
+  <nav><span id="planPill" class="pill">…</span> <a href="#" id="logout" class="btn btn-sm">Sign out</a></nav>
+</header>
+
+<div class="app">
+  <!-- Sign in / up -->
+  <div id="authPanel" class="panel" style="max-width:440px;margin:40px auto;">
+    <h2 style="margin-top:0">Sign in to DynaQR</h2>
+    <p class="muted">Enter your email to get started. We'll create your account and issue an access token (kept in this browser).</p>
+    <div class="row">
+      <div class="field"><input id="email" type="email" placeholder="you@example.com" /></div>
+      <button id="signupBtn" class="btn btn-primary">Continue →</button>
+    </div>
+    <p id="authErr" class="muted" style="color:var(--danger)"></p>
+  </div>
+
+  <!-- Main app -->
+  <div id="mainApp" class="hidden">
+    <div class="appbar">
+      <div><strong id="emailLabel"></strong> <span id="usage" class="muted"></span></div>
+      <div class="row">
+        <button id="upgradeBtn" class="btn btn-primary hidden">Upgrade to Pro</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin-top:0">Create a dynamic QR code</h3>
+      <div class="row">
+        <div class="field"><label>Title (optional)</label><input id="title" placeholder="Spring menu" /></div>
+        <div class="field"><label>Destination URL</label><input id="target" placeholder="example.com/menu" /></div>
+        <div style="display:flex;align-items:flex-end"><button id="createBtn" class="btn btn-primary">Create</button></div>
+      </div>
+    </div>
+
+    <div id="links" class="panel"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

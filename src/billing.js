@@ -1,0 +1,39 @@
+// Stripe billing — gated behind env vars so the app runs fully without a Stripe
+// account (great for local demos). When keys are present, real subscription
+// checkout + webhooks take over.
+import Stripe from 'stripe';
+
+const KEY = process.env.STRIPE_SECRET_KEY;
+const PRICE_ID = process.env.STRIPE_PRICE_ID;          // a recurring Price for the Pro plan
+const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+
+export const billingEnabled = Boolean(KEY && PRICE_ID);
+const stripe = billingEnabled ? new Stripe(KEY) : null;
+
+export async function createCheckoutSession(account, baseUrl) {
+  if (!billingEnabled) throw new Error('billing_disabled');
+  return stripe.checkout.sessions.create({
+    mode: 'subscription',
+    line_items: [{ price: PRICE_ID, quantity: 1 }],
+    customer_email: account.email,
+    client_reference_id: account.id,
+    success_url: `${baseUrl}/app?upgraded=1`,
+    cancel_url: `${baseUrl}/app?canceled=1`,
+    allow_promotion_codes: true,
+  });
+}
+
+// Verify and parse a Stripe webhook. Returns the event or null if invalid.
+export function constructEvent(rawBody, signature) {
+  if (!billingEnabled || !WEBHOOK_SECRET) return null;
+  try {
+    return stripe.webhooks.constructEvent(rawBody, signature, WEBHOOK_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+export async function customerIdFromEvent(event) {
+  const obj = event.data.object;
+  return obj.customer || null;
+}

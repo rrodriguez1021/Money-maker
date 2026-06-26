@@ -1,0 +1,116 @@
+# ◧ DynaQR — Dynamic QR Codes & Link Tracking (a launch-ready micro-SaaS)
+
+Print a QR code **once**, change where it points **forever**, and track every scan.
+Static QR codes die the moment they're printed — DynaQR codes are *dynamic*: the
+short link behind the QR is editable any time, so a menu, flyer, business card or
+product label never goes stale. Scan analytics show what's actually working.
+
+This is a complete, self-contained product you can deploy and charge money for.
+
+---
+
+## Why this makes money
+
+Dynamic QR codes are a **proven recurring-revenue niche** — businesses happily pay
+monthly because reprinting physical materials costs far more than a subscription.
+
+The monetization is built in:
+
+| | Free | **Pro ($9/mo)** |
+|---|---|---|
+| Dynamic QR codes | 3 | **Unlimited** |
+| Editable destinations | ✅ | ✅ |
+| PNG / SVG export | ✅ | ✅ |
+| Scan analytics | — | ✅ |
+
+The free tier drives signups; the code limit + analytics gate drive upgrades.
+Billing runs through **Stripe Checkout** (subscriptions) with webhook-driven plan
+sync. Change the price, limits, and tiers in `src/db.js` (`PLAN_LIMITS`) — it's your product.
+
+---
+
+## Run it (zero config)
+
+```bash
+npm install
+npm start
+# → http://localhost:3000   (billing disabled = demo mode, everything else works)
+```
+
+Open the landing page at `/`, the dashboard at `/app`. No database server, no API
+keys, no accounts to create — it uses Node's built-in SQLite and a single data file.
+
+Run the tests:
+
+```bash
+npm test
+```
+
+## Turn on real billing
+
+1. In the [Stripe dashboard](https://dashboard.stripe.com), create a Product with a
+   **recurring Price** (e.g. $9/month).
+2. Copy `.env.example` → `.env` and set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`.
+3. Add a webhook endpoint → `https://yourdomain.com/webhook/stripe`, subscribe to
+   `checkout.session.completed`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, and paste the signing secret into
+   `STRIPE_WEBHOOK_SECRET`.
+4. Restart. The **Upgrade to Pro** button now opens Stripe Checkout; successful
+   payments flip the account to Pro automatically.
+
+Test with Stripe's `4242 4242 4242 4242` test card before going live.
+
+## Deploy
+
+**Docker** (works on Fly.io, Render, Railway, a VPS, etc.):
+
+```bash
+docker build -t dynaqr .
+docker run -p 3000:3000 -v dynaqr-data:/data \
+  -e PUBLIC_URL=https://qr.yourdomain.com \
+  -e STRIPE_SECRET_KEY=sk_live_... -e STRIPE_PRICE_ID=price_... \
+  -e STRIPE_WEBHOOK_SECRET=whsec_... dynaqr
+```
+
+Set `PUBLIC_URL` to your real domain so QR codes encode the correct address.
+Mount a volume for `/data` so links and scans persist across restarts.
+
+## How it works
+
+```
+src/
+  server.js   Express app: auth, links CRUD, QR rendering, redirect+scan logging, billing
+  db.js       Node built-in SQLite — accounts, links, scans; plan limits
+  billing.js  Stripe checkout + webhook verification (no-ops without keys)
+public/
+  index.html  marketing landing page
+  app.html / app.js   the dashboard (token auth, create/edit/track codes)
+  style.css   shared styling
+test/
+  api.test.js end-to-end API tests (no external services)
+```
+
+- A QR encodes a **stable** short URL: `https://yourdomain/r/<code>`.
+- Hitting `/r/<code>` logs a scan (timestamp, referrer, user-agent) and 302-redirects
+  to the current `target` — which the owner can change at any time.
+- Accounts use a bearer token issued at signup (passwordless MVP). For production,
+  swap the token issuance in `POST /api/signup` for emailed magic links.
+
+## API quick reference
+
+```
+POST   /api/signup            {email} → {token}
+GET    /api/me                account + plan + usage
+GET    /api/links             list your codes (+scan counts)
+POST   /api/links             {target,title} → new dynamic QR
+PUT    /api/links/:id         {target?,title?,active?} → repoint / rename
+DELETE /api/links/:id
+GET    /api/links/:id/qr.png  | qr.svg     QR image
+GET    /api/links/:id/stats   scan analytics (Pro)
+POST   /api/billing/checkout  → Stripe Checkout URL (Pro upgrade)
+GET    /r/:id                 public redirect (what a scan hits)
+```
+
+## License
+
+MIT — it's yours to run, modify, and sell.
