@@ -150,7 +150,21 @@ export const listLinks = (accountId) => listLinksStmt.all(accountId);
 export const countLinks = (accountId) => countLinksStmt.get(accountId).n;
 export const updateLink = (id, accountId, title, target, active, colorDark = null, colorBg = null) =>
   updateLinkStmt.run(title, target, active ? 1 : 0, colorDark, colorBg, id, accountId);
-export const deleteLink = (id, accountId) => deleteLinkStmt.run(id, accountId);
+// Delete a link and its scans + page clicks together (no orphaned rows).
+const delScansForLink = db.prepare(`DELETE FROM scans WHERE link_id = ?`);
+const delClicksForLink = db.prepare(`DELETE FROM page_clicks WHERE link_id = ?`);
+export function deleteLink(id, accountId) {
+  db.exec('BEGIN');
+  try {
+    delScansForLink.run(id);
+    delClicksForLink.run(id);
+    deleteLinkStmt.run(id, accountId);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
 
 // Set/clear the hosted-page content for a link (JSON string or null).
 const setPageStmt = db.prepare(`UPDATE links SET page_json = ? WHERE id = ? AND account_id = ?`);

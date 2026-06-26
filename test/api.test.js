@@ -283,6 +283,33 @@ test('billing portal requires billing + a stripe customer', async () => {
   assert.equal(res.status, 503);
 });
 
+test('bulk delete removes only your own codes and cascades scans', async () => {
+  const a = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'bulkdel@example.com' }),
+  }).then(j);
+  const AH = { 'Content-Type': 'application/json', Authorization: `Bearer ${a.token}` };
+  const l1 = await fetch(`${base}/api/links`, { method: 'POST', headers: AH, body: JSON.stringify({ target: 'example.com/1' }) }).then(j);
+  const l2 = await fetch(`${base}/api/links`, { method: 'POST', headers: AH, body: JSON.stringify({ target: 'example.com/2' }) }).then(j);
+  await fetch(`${base}/r/${l1.id}`, { redirect: 'manual' }); // scan, to verify cascade
+
+  // Another user's link should be ignored by the bulk delete.
+  const b = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'bulkdel2@example.com' }),
+  }).then(j);
+  const BH = { 'Content-Type': 'application/json', Authorization: `Bearer ${b.token}` };
+  const other = await fetch(`${base}/api/links`, { method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/x' }) }).then(j);
+
+  const del = await fetch(`${base}/api/links/bulk-delete`, { method: 'POST', headers: AH, body: JSON.stringify({ ids: [l1.id, l2.id, other.id] }) }).then(j);
+  assert.equal(del.deleted, 2, 'only the two owned links deleted');
+
+  assert.equal((await fetch(`${base}/api/links?token=${a.token}`).then(j)).links.length, 0);
+  assert.equal((await fetch(`${base}/api/links?token=${b.token}`).then(j)).links.length, 1, "other user's link untouched");
+  // The deleted link's scan no longer resolves.
+  assert.equal((await fetch(`${base}/r/${l1.id}`, { redirect: 'manual' })).status, 404);
+});
+
 test('pausing a code makes it 404; resuming restores the redirect; lastScan reported', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -375,6 +375,7 @@ async function loadLinks() {
     el.className = 'link-item' + (l.active ? '' : ' paused');
     el.dataset.search = `${l.title || ''} ${l.target || ''} ${l.shortUrl}`.toLowerCase();
     el.innerHTML = `
+      <input type="checkbox" class="sel" data-id="${l.id}" title="Select" />
       <div class="qr-wrap"><img class="link-qr" alt="QR" src="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" /><span class="qr-sheen"></span></div>
       <div class="link-main">
         <h4>${escapeHtml(l.title || '(untitled)')}${l.active ? '' : ' <span class="pill paused-pill">paused</span>'}</h4>
@@ -425,6 +426,7 @@ async function loadLinks() {
     el.querySelector('[data-act=stats]').onclick = () => showStats(l, el);
     wrap.appendChild(el);
   }
+  updateBulkBar();
 }
 
 // Inline editor for a hosted page's content (headline, subtitle, buttons).
@@ -514,6 +516,30 @@ document.getElementById('linkFilter')?.addEventListener('input', (e) => {
     it.style.display = !q || (it.dataset.search || '').includes(q) ? '' : 'none';
   });
 });
+
+// --- Bulk select + delete ---
+function selectedIds() { return [...document.querySelectorAll('#links .sel:checked')].map((c) => c.dataset.id); }
+function updateBulkBar() {
+  const n = selectedIds().length;
+  const bar = document.getElementById('bulkBar');
+  if (!bar) return;
+  bar.classList.toggle('hidden', n === 0);
+  const c = document.getElementById('bulkCount'); if (c) c.textContent = `${n} selected`;
+}
+document.getElementById('links')?.addEventListener('change', (e) => { if (e.target.classList.contains('sel')) updateBulkBar(); });
+document.getElementById('bulkClearBtn')?.addEventListener('click', () => {
+  document.querySelectorAll('#links .sel:checked').forEach((c) => (c.checked = false));
+  updateBulkBar();
+});
+document.getElementById('bulkDelBtn')?.addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+  const ids = selectedIds();
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} code(s)? Printed versions will stop working.`)) return;
+  await api('/api/links/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) });
+  toast(`Deleted ${ids.length} ✓`);
+  me = await api('/api/me');
+  await boot();
+}));
 
 async function showStats(l, el) {
   try {

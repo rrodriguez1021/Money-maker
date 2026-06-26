@@ -266,6 +266,17 @@ app.delete('/api/links/:id', auth, (req, res) => {
   res.json({ deleted: true });
 });
 
+// Bulk delete codes you own (ignores ids that aren't yours).
+app.post('/api/links/bulk-delete', auth, (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 500) : [];
+  let deleted = 0;
+  for (const id of ids) {
+    const l = findLink(id);
+    if (l && l.account_id === req.account.id) { deleteLink(id, req.account.id); deleted++; }
+  }
+  res.json({ deleted });
+});
+
 // Duplicate a code (copies destination, title, colors, logo, style, page).
 app.post('/api/links/:id/duplicate', auth, (req, res) => {
   const src = findLink(req.params.id);
