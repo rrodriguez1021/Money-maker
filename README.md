@@ -16,14 +16,16 @@ monthly because reprinting physical materials costs far more than a subscription
 
 The monetization is built in:
 
-| | Free | **Pro ($9/mo)** |
-|---|---|---|
-| Dynamic QR codes | 3 | **Unlimited** |
-| Editable destinations | ✅ | ✅ |
-| PNG / SVG export | ✅ | ✅ |
-| Scan analytics | — | ✅ |
+| | Free | **Pro ($9/mo)** | **Business ($29/mo)** |
+|---|---|---|---|
+| Dynamic QR codes | 3 | **Unlimited** | **Unlimited** |
+| Editable destinations | ✅ | ✅ | ✅ |
+| PNG / SVG export | ✅ | ✅ | ✅ |
+| Scan analytics | — | ✅ | ✅ |
+| Branded QR colors | — | — | ✅ |
 
-The free tier drives signups; the code limit + analytics gate drive upgrades.
+The free tier drives signups; the code limit + analytics gate drive Pro upgrades; branded
+colors (the #1 upsell in this market) drive Business upgrades and lift revenue per customer.
 Billing runs through **Stripe Checkout** (subscriptions) with webhook-driven plan
 sync. Change the price, limits, and tiers in `src/db.js` (`PLAN_LIMITS`) — it's your product.
 

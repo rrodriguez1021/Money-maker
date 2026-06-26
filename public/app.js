@@ -59,28 +59,35 @@ async function boot() {
   $('#authPanel').classList.add('hidden');
   $('#mainApp').classList.remove('hidden');
   $('#emailLabel').textContent = me.email;
-  const isPro = me.plan === 'pro';
-  $('#planPill').textContent = isPro ? 'PRO' : 'FREE';
-  $('#planPill').className = 'pill' + (isPro ? ' pro' : '');
+  const isPaid = me.plan !== 'free';
+  $('#planPill').textContent = me.plan.toUpperCase();
+  $('#planPill').className = 'pill' + (isPaid ? ' pro' : '');
   const max = me.limits.maxLinks;
   $('#usage').textContent = max ? `· ${me.used}/${max} codes used` : `· ${me.used} codes`;
+
+  // Show brand color pickers only when the plan includes branding.
+  $('#brandRow').classList.toggle('hidden', !me.limits.branding);
+
+  // Upgrade buttons: offer Pro if on Free, and Business unless already on Business.
   const upBtn = $('#upgradeBtn');
-  if (!isPro && me.billingEnabled) {
-    upBtn.classList.remove('hidden');
-    upBtn.onclick = upgrade;
-  } else if (!isPro) {
-    upBtn.classList.remove('hidden');
-    upBtn.textContent = 'Pro (configure Stripe)';
-    upBtn.onclick = () => toast('Set STRIPE_SECRET_KEY + STRIPE_PRICE_ID to enable billing.', true);
-  } else {
-    upBtn.classList.add('hidden');
-  }
+  const bizBtn = $('#businessBtn');
+  upBtn.classList.toggle('hidden', me.plan !== 'free');
+  bizBtn.classList.toggle('hidden', me.plan === 'business');
+  upBtn.onclick = () => upgrade('pro');
+  bizBtn.onclick = () => upgrade('business');
+
   await loadLinks();
 }
 
-async function upgrade() {
+async function upgrade(plan) {
+  if (!me.billingEnabled) {
+    return toast('Set STRIPE_SECRET_KEY + STRIPE_PRICE_ID' + (plan === 'business' ? '_BUSINESS' : '') + ' to enable billing.', true);
+  }
+  if (plan === 'business' && !me.businessBillingEnabled) {
+    return toast('Set STRIPE_PRICE_ID_BUSINESS to sell the Business tier.', true);
+  }
   try {
-    const r = await api('/api/billing/checkout', { method: 'POST' });
+    const r = await api('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ plan }) });
     location.href = r.url;
   } catch (e) {
     toast('Checkout unavailable: ' + (e.data?.error || 'error'), true);
@@ -92,8 +99,13 @@ $('#createBtn').onclick = async () => {
   const target = $('#target').value.trim();
   const title = $('#title').value.trim();
   if (!target) return toast('Enter a destination URL', true);
+  const body = { target, title };
+  if (me && me.limits.branding) {
+    body.colorDark = $('#colorDark').value;
+    body.colorBg = $('#colorBg').value;
+  }
   try {
-    await api('/api/links', { method: 'POST', body: JSON.stringify({ target, title }) });
+    await api('/api/links', { method: 'POST', body: JSON.stringify(body) });
     $('#target').value = ''; $('#title').value = '';
     toast('QR code created ✓');
     me = await api('/api/me');

@@ -18,7 +18,8 @@ import {
   recordScan, countScans, recentScans, dailyScans, deleteAccount,
 } from './db.js';
 import {
-  billingEnabled, createCheckoutSession, constructEvent, customerIdFromEvent,
+  billingEnabled, businessBillingEnabled, createCheckoutSession, constructEvent,
+  customerIdFromEvent, planForSubscription,
 } from './billing.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -46,12 +47,13 @@ app.post('/webhook/stripe', express.raw({ type: 'application/json' }), (req, res
     if (event.type === 'checkout.session.completed') {
       const s = event.data.object;
       const acct = findAccountById(s.client_reference_id);
-      if (acct) setPlan(acct.id, 'pro', s.customer);
+      const plan = s.metadata?.plan === 'business' ? 'business' : 'pro';
+      if (acct) setPlan(acct.id, plan, s.customer);
     } else if (event.type === 'customer.subscription.deleted') {
       if (customer) setPlanForCustomer(customer, 'free');
     } else if (event.type === 'customer.subscription.updated') {
       const sub = event.data.object;
-      if (customer) setPlanForCustomer(customer, sub.status === 'active' ? 'pro' : 'free');
+      if (customer) setPlanForCustomer(customer, sub.status === 'active' ? planForSubscription(sub) : 'free');
     }
   })().catch((e) => console.error('webhook handler error', e));
 
@@ -86,9 +88,14 @@ app.get('/api/me', auth, (req, res) => {
   res.json({
     email: req.account.email,
     plan: req.account.plan,
-    limits: { maxLinks: limit.maxLinks === Infinity ? null : limit.maxLinks, analytics: limit.analytics },
+    limits: {
+      maxLinks: limit.maxLinks === Infinity ? null : limit.maxLinks,
+      analytics: limit.analytics,
+      branding: limit.branding,
+    },
     used: countLinks(req.account.id),
     billingEnabled,
+    businessBillingEnabled,
   });
 });
 
@@ -109,7 +116,8 @@ app.post('/api/links', auth, (req, res) => {
       hint: 'Upgrade to Pro for unlimited dynamic QR codes.' });
   }
   const title = String(req.body.title || '').slice(0, 120);
-  const link = createLink(shortId(), req.account.id, title, target, now());
+  const { colorDark, colorBg } = brandColors(req.body, req.account.plan);
+  const link = createLink(shortId(), req.account.id, title, target, now(), colorDark, colorBg);
   res.status(201).json({ ...link, active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
 });
 
@@ -120,7 +128,12 @@ app.put('/api/links/:id', auth, (req, res) => {
   if (!target) return res.status(400).json({ error: 'invalid_target' });
   const title = req.body.title !== undefined ? String(req.body.title).slice(0, 120) : link.title;
   const active = req.body.active !== undefined ? !!req.body.active : !!link.active;
-  updateLink(link.id, req.account.id, title, target, active);
+  // Preserve existing colors unless the request supplies new ones (and plan allows it).
+  const hasColorFields = req.body.colorDark !== undefined || req.body.colorBg !== undefined;
+  const { colorDark, colorBg } = hasColorFields
+    ? brandColors(req.body, req.account.plan)
+    : { colorDark: link.color_dark, colorBg: link.color_bg };
+  updateLink(link.id, req.account.id, title, target, active, colorDark, colorBg);
   res.json({ ...findLink(link.id), active });
 });
 
@@ -143,6 +156,10 @@ app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
   if (!link || link.account_id !== req.account.id) return res.status(404).json({ error: 'not_found' });
   const url = `${baseUrl(req)}/r/${link.id}`;
   const opts = { margin: 1, width: 512, errorCorrectionLevel: 'M' };
+  // Branded colors render only while the account is on a branding-enabled plan.
+  if (planLimit(req.account.plan).branding && (link.color_dark || link.color_bg)) {
+    opts.color = { dark: link.color_dark || '#000000', light: link.color_bg || '#ffffff' };
+  }
   try {
     if (req.params.fmt === 'svg') {
       res.type('image/svg+xml').send(await QRCode.toString(url, { ...opts, type: 'svg' }));
@@ -169,11 +186,12 @@ app.get('/api/links/:id/stats', auth, (req, res) => {
   });
 });
 
-// --- Billing: start a checkout to upgrade to Pro ---
+// --- Billing: start a checkout to upgrade to a paid plan (pro | business) ---
 app.post('/api/billing/checkout', auth, async (req, res) => {
   if (!billingEnabled) return res.status(503).json({ error: 'billing_disabled', hint: 'Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID.' });
+  const plan = req.body.plan === 'business' ? 'business' : 'pro';
   try {
-    const session = await createCheckoutSession(req.account, baseUrl(req));
+    const session = await createCheckoutSession(req.account, baseUrl(req), plan);
     res.json({ url: session.url });
   } catch (e) {
     console.error('checkout error', e);
@@ -195,6 +213,15 @@ app.get('/healthz', (req, res) => res.json({ ok: true, billingEnabled }));
 app.get('/app', (req, res) => res.sendFile(join(__dirname, '..', 'public', 'app.html')));
 
 app.use(express.static(join(__dirname, '..', 'public')));
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+// Returns sanitized brand colors, but only if the plan allows branding; otherwise
+// both are null (so non-Business accounts always get the default black-on-white code).
+function brandColors(body, plan) {
+  if (!planLimit(plan).branding) return { colorDark: null, colorBg: null };
+  const pick = (v) => (typeof v === 'string' && HEX.test(v) ? v : null);
+  return { colorDark: pick(body.colorDark), colorBg: pick(body.colorBg) };
+}
 
 function normalizeUrl(input) {
   let s = String(input || '').trim();

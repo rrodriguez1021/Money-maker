@@ -55,7 +55,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
 
 .pricing { padding: 50px 0 30px; }
 .pricing h2 { text-align: center; font-size: 32px; }
-.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; max-width: 720px; margin: 24px auto; }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; max-width: 940px; margin: 24px auto; }
 .plan { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 26px; position: relative; }
 .plan.featured { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 20px 60px -30px var(--accent); }
 .plan h3 { margin: 0 0 6px; }

@@ -10,6 +10,7 @@ const dir = mkdtempSync(join(tmpdir(), 'dynaqr-'));
 process.env.DB_PATH = join(dir, 'test.db');
 
 const { app } = await import('../src/server.js');
+const { setPlan, findAccountByToken } = await import('../src/db.js');
 let server, base;
 
 before(async () => {
@@ -95,6 +96,47 @@ test('free plan enforces the 3-code limit', async () => {
 test('unauthorized without token', async () => {
   const res = await fetch(`${base}/api/links`);
   assert.equal(res.status, 401);
+});
+
+test('branded QR colors are gated to the Business plan', async () => {
+  // Free account: colors are ignored and stored as null.
+  const free = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'brandfree@example.com' }),
+  }).then(j);
+  const FH = { 'Content-Type': 'application/json', Authorization: `Bearer ${free.token}` };
+  const freeLink = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: FH, body: JSON.stringify({ target: 'example.com/a', colorDark: '#ff0000', colorBg: '#0000ff' }),
+  }).then(j);
+  assert.equal(freeLink.color_dark, null, 'free plan cannot set brand color');
+
+  // Business account: colors persist and the QR renders.
+  const biz = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'brandbiz@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(biz.token).id, 'business');
+  const BH = { 'Content-Type': 'application/json', Authorization: `Bearer ${biz.token}` };
+  const bizLink = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/b', colorDark: '#112233', colorBg: '#ffeedd' }),
+  }).then(j);
+  assert.equal(bizLink.color_dark, '#112233');
+  assert.equal(bizLink.color_bg, '#ffeedd');
+
+  // Invalid hex is rejected (stored null), not blindly trusted.
+  const bad = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/c', colorDark: 'red; DROP TABLE' }),
+  }).then(j);
+  assert.equal(bad.color_dark, null, 'invalid hex rejected');
+
+  const qr = await fetch(`${base}/api/links/${bizLink.id}/qr.png?token=${biz.token}`);
+  assert.equal(qr.headers.get('content-type'), 'image/png');
+  assert.ok(Number(qr.headers.get('content-length')) > 100);
+
+  // /api/me reflects branding entitlement
+  const me = await fetch(`${base}/api/me`, { headers: BH }).then(j);
+  assert.equal(me.plan, 'business');
+  assert.equal(me.limits.branding, true);
 });
 
 test('account deletion erases account, links and scans (GDPR)', async () => {

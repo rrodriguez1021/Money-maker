@@ -44,10 +44,23 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_scans_link ON scans(link_id);
 `);
 
-// Plan limits — the core monetization lever.
+// --- Lightweight migrations: add columns to existing databases idempotently. ---
+function ensureColumn(table, column, decl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+  }
+}
+// Branded-QR colors (Business tier). Null = default black-on-white.
+ensureColumn('links', 'color_dark', 'TEXT');
+ensureColumn('links', 'color_bg', 'TEXT');
+
+// Plan limits — the core monetization lever. Adding the Business tier (branded
+// QR colors) lifts revenue per customer: $9 Pro → $29 Business.
 export const PLAN_LIMITS = {
-  free: { maxLinks: 3, analytics: false, label: 'Free' },
-  pro:  { maxLinks: Infinity, analytics: true, label: 'Pro' },
+  free:     { maxLinks: 3, analytics: false, branding: false, label: 'Free' },
+  pro:      { maxLinks: Infinity, analytics: true, branding: false, label: 'Pro' },
+  business: { maxLinks: Infinity, analytics: true, branding: true, label: 'Business' },
 };
 
 export function planLimit(plan) {
@@ -76,23 +89,27 @@ export const setPlanForCustomer = (customerId, plan) => setPlanByCustomer.run(pl
 
 // --- Links ---
 const insertLink = db.prepare(
-  `INSERT INTO links (id, account_id, title, target, created_at) VALUES (?, ?, ?, ?, ?)`
+  `INSERT INTO links (id, account_id, title, target, created_at, color_dark, color_bg)
+   VALUES (?, ?, ?, ?, ?, ?, ?)`
 );
 const getLink = db.prepare(`SELECT * FROM links WHERE id = ?`);
 const listLinksStmt = db.prepare(`SELECT * FROM links WHERE account_id = ? ORDER BY created_at DESC`);
 const countLinksStmt = db.prepare(`SELECT COUNT(*) AS n FROM links WHERE account_id = ?`);
-const updateLinkStmt = db.prepare(`UPDATE links SET title = ?, target = ?, active = ? WHERE id = ? AND account_id = ?`);
+const updateLinkStmt = db.prepare(
+  `UPDATE links SET title = ?, target = ?, active = ?, color_dark = ?, color_bg = ?
+   WHERE id = ? AND account_id = ?`
+);
 const deleteLinkStmt = db.prepare(`DELETE FROM links WHERE id = ? AND account_id = ?`);
 
-export function createLink(id, accountId, title, target, now) {
-  insertLink.run(id, accountId, title, target, now);
+export function createLink(id, accountId, title, target, now, colorDark = null, colorBg = null) {
+  insertLink.run(id, accountId, title, target, now, colorDark, colorBg);
   return getLink.get(id);
 }
 export const findLink = (id) => getLink.get(id);
 export const listLinks = (accountId) => listLinksStmt.all(accountId);
 export const countLinks = (accountId) => countLinksStmt.get(accountId).n;
-export const updateLink = (id, accountId, title, target, active) =>
-  updateLinkStmt.run(title, target, active ? 1 : 0, id, accountId);
+export const updateLink = (id, accountId, title, target, active, colorDark = null, colorBg = null) =>
+  updateLinkStmt.run(title, target, active ? 1 : 0, colorDark, colorBg, id, accountId);
 export const deleteLink = (id, accountId) => deleteLinkStmt.run(id, accountId);
 
 // --- Account deletion (GDPR right to erasure): remove account + its links + scans ---

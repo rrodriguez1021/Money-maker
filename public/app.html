@@ -32,6 +32,7 @@
       <div><strong id="emailLabel"></strong> <span id="usage" class="muted"></span></div>
       <div class="row">
         <button id="upgradeBtn" class="btn btn-primary hidden">Upgrade to Pro</button>
+        <button id="businessBtn" class="btn hidden">Go Business · branded codes</button>
       </div>
     </div>
 
@@ -41,6 +42,11 @@
         <div class="field"><label>Title (optional)</label><input id="title" placeholder="Spring menu" /></div>
         <div class="field"><label>Destination URL</label><input id="target" placeholder="example.com/menu" /></div>
         <div style="display:flex;align-items:flex-end"><button id="createBtn" class="btn btn-primary">Create</button></div>
+      </div>
+      <div id="brandRow" class="row hidden" style="margin-top:12px;align-items:center">
+        <div><label>QR color</label><input id="colorDark" type="color" value="#0b0d17" style="width:54px;height:42px;padding:4px" /></div>
+        <div><label>Background</label><input id="colorBg" type="color" value="#ffffff" style="width:54px;height:42px;padding:4px" /></div>
+        <span class="pill pro" style="align-self:flex-end">Business · branded codes</span>
       </div>
     </div>
 
