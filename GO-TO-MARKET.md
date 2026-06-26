@@ -1,4 +1,4 @@
-# DynaQR — Go-To-Market Kit (your path to the first dollar)
+# Qrysm — Go-To-Market Kit (your path to the first dollar)
 
 The product is built and tested. **Revenue is now a sales problem, not a code problem.**
 This kit is the exact motion to get your first paying customer. Honest expectation:
@@ -42,7 +42,7 @@ Pick the niche you have *any* connection to. Warm beats cold.
 > Hi {name},
 >
 > I noticed {restaurant} uses a QR menu. When your menu changes, do you have to
-> reprint the code? With DynaQR you print the QR once and update where it points
+> reprint the code? With Qrysm you print the QR once and update where it points
 > from your phone — plus you see how many people scan it each day.
 >
 > It's $9/mo, set up in 5 minutes, first 14 days free. Want me to set yours up?
@@ -52,7 +52,7 @@ Pick the niche you have *any* connection to. Warm beats cold.
 ## Instagram / DM template (sellers, gyms, agents)
 
 > Hey {name}! Love what you're doing with {brand}. Quick one — if you use QR codes
-> on {packaging / signs / flyers}, DynaQR lets you change the destination after
+> on {packaging / signs / flyers}, Qrysm lets you change the destination after
 > they're printed and tracks scans. $9/mo, free trial. Want a link?
 
 ## The 30-second pitch (in person)

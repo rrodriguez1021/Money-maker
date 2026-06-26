@@ -15,7 +15,7 @@
   var bar = document.createElement('div');
   bar.id = 'cookie-banner';
   bar.innerHTML =
-    '<p>DynaQR stores a sign-in token in your browser and logs QR <strong>scan events</strong> ' +
+    '<p>Qrysm stores a sign-in token in your browser and logs QR <strong>scan events</strong> ' +
     '(time, referrer, device) to provide analytics. We don’t use ad trackers. ' +
     'See our <a href="/privacy.html">Privacy Policy</a>.</p>';
 

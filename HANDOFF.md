@@ -1,4 +1,4 @@
-# DynaQR — Project Handoff (start here)
+# Qrysm — Project Handoff (start here)
 
 A complete, tested, deploy-ready dynamic-QR SaaS. This page is the single source of
 truth for what exists and what's left. The build is done; the remaining steps are the

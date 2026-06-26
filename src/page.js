@@ -43,7 +43,7 @@ export function sanitizePage(input, allowAccent = false) {
 
 export function renderPage(page, opts = {}) {
   const accent = page.accent && HEX.test(page.accent) ? page.accent : '#7c8cff';
-  const title = page.headline || opts.title || 'DynaQR page';
+  const title = page.headline || opts.title || 'Qrysm page';
   const buttons = (page.buttons || []).map((b) =>
     `<a class="lnk" href="${escapeHtml(b.url)}" rel="noopener nofollow">${escapeHtml(b.label)}</a>`).join('\n');
   return `<!doctype html>
@@ -72,7 +72,7 @@ export function renderPage(page, opts = {}) {
   ${title ? `<h1>${escapeHtml(title)}</h1>` : ''}
   ${page.subtitle ? `<p class="sub">${escapeHtml(page.subtitle)}</p>` : ''}
   ${buttons}
-  <footer>Made with <a href="${escapeHtml(opts.homeUrl || '/')}" rel="noopener">DynaQR</a></footer>
+  <footer>Made with <a href="${escapeHtml(opts.homeUrl || '/')}" rel="noopener">Qrysm</a></footer>
 </div>
 </body></html>`;
 }

@@ -1,7 +1,7 @@
-// DynaQR — dynamic QR code + link tracking SaaS.
+// Qrysm — dynamic QR code + link tracking SaaS.
 //
 // What makes it monetizable: a QR code printed on a flyer, menu, or product is
-// permanent, but with DynaQR the *destination* behind it is editable forever and
+// permanent, but with Qrysm the *destination* behind it is editable forever and
 // every scan is tracked. Free users get 3 codes; Pro (Stripe subscription) gets
 // unlimited codes + scan analytics. That recurring upgrade is the revenue.
 
@@ -345,7 +345,7 @@ app.get('/r/:id', (req, res) => {
   if (link.page_json) {
     try {
       const page = JSON.parse(link.page_json);
-      // "Made with DynaQR" footer carries the owner's referral code → organic growth.
+      // "Made with Qrysm" footer carries the owner's referral code → organic growth.
       const owner = findAccountById(link.account_id);
       const homeUrl = owner && owner.ref_code ? `${baseUrl(req)}/?ref=${owner.ref_code}` : baseUrl(req);
       return res.type('html').send(renderPage(page, { title: link.title, homeUrl }));
@@ -415,7 +415,7 @@ function normalizeUrl(input) {
 // Don't auto-listen when imported by tests.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   app.listen(PORT, () => {
-    console.log(`DynaQR listening on :${PORT}  (billing ${billingEnabled ? 'ENABLED' : 'disabled — demo mode'})`);
+    console.log(`Qrysm listening on :${PORT}  (billing ${billingEnabled ? 'ENABLED' : 'disabled — demo mode'})`);
   });
 }
 

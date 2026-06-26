@@ -1,4 +1,4 @@
-// DynaQR data layer — uses Node's built-in SQLite (node:sqlite, Node >= 22.5).
+// Qrysm data layer — uses Node's built-in SQLite (node:sqlite, Node >= 22.5).
 // Single-file database so the app runs anywhere with zero external services.
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';

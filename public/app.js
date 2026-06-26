@@ -1,4 +1,4 @@
-// DynaQR dashboard — talks to the JSON API using a token kept in localStorage.
+// Qrysm dashboard — talks to the JSON API using a token kept in localStorage.
 const $ = (s) => document.querySelector(s);
 const TOKEN_KEY = 'dynaqr_token';
 let token = localStorage.getItem(TOKEN_KEY);
@@ -156,6 +156,77 @@ $('#pageCreateBtn').onclick = async () => {
     else toast('Could not create page: ' + (e.data?.error || 'error'), true);
   }
 };
+
+// ===== ⌘K command palette =====
+const cmdk = { open: false, items: [], filtered: [], sel: 0 };
+
+function cmdkCommands() {
+  const base = [
+    { icon: '✦', label: 'Create dynamic code', hint: 'new redirect QR', run: () => focusEl('#target') },
+    { icon: '📄', label: 'Create hosted page', hint: 'no website needed', run: () => openDetailsNear('#pageHeadline') },
+    { icon: '⬚', label: 'Bulk create codes', hint: 'paste many URLs', run: () => openDetailsNear('#bulkInput') },
+    { icon: '⬇', label: 'Export all codes (CSV)', run: () => window.open(`/api/links/export.csv?token=${encodeURIComponent(token)}`, '_blank') },
+    { icon: '🔑', label: 'Developer API keys', run: () => openDetailsNear('#keyName') },
+    { icon: '◢', label: 'Pricing', run: () => window.open('/#pricing', '_blank') },
+    { icon: '⎋', label: 'Sign out', run: () => $('#logout').click() },
+  ];
+  if (me && me.plan === 'free') base.splice(4, 0, { icon: '▲', label: 'Upgrade to Pro', hint: '$9/mo', run: () => upgrade('pro') });
+  if (me && me.plan !== 'business') base.splice(5, 0, { icon: '◈', label: 'Go Business', hint: 'branded codes', run: () => upgrade('business') });
+  return base;
+}
+
+async function openCmdk() {
+  cmdk.open = true; cmdk.sel = 0;
+  $('#cmdk').classList.remove('hidden');
+  const input = $('#cmdk-input'); input.value = ''; input.focus();
+  let links = [];
+  try { links = (await api('/api/links')).links; } catch {}
+  const linkItems = links.map((l) => ({
+    icon: l.page_json ? '📄' : '◫', label: l.title || '(untitled)', hint: l.page_json ? 'hosted page' : l.target,
+    run: () => window.open(l.shortUrl, '_blank'),
+  }));
+  cmdk.items = [...cmdkCommands(), ...linkItems];
+  renderCmdk('');
+}
+function closeCmdk() { cmdk.open = false; $('#cmdk').classList.add('hidden'); }
+
+function renderCmdk(q) {
+  const query = q.trim().toLowerCase();
+  cmdk.filtered = !query ? cmdk.items
+    : cmdk.items.filter((i) => (i.label + ' ' + (i.hint || '')).toLowerCase().includes(query));
+  if (cmdk.sel >= cmdk.filtered.length) cmdk.sel = Math.max(0, cmdk.filtered.length - 1);
+  const list = $('#cmdk-list');
+  list.innerHTML = cmdk.filtered.length
+    ? cmdk.filtered.map((i, n) => `<div class="cmdk-item${n === cmdk.sel ? ' on' : ''}" data-n="${n}">
+        <span class="cmdk-ic">${i.icon || '›'}</span><span class="cmdk-label">${escapeHtml(i.label)}</span>
+        ${i.hint ? `<span class="cmdk-hint">${escapeHtml(i.hint)}</span>` : ''}</div>`).join('')
+    : '<div class="cmdk-empty">No matches</div>';
+  list.querySelectorAll('.cmdk-item').forEach((el) => {
+    el.onmouseenter = () => { cmdk.sel = +el.dataset.n; paintCmdkSel(); };
+    el.onclick = () => runCmdk(+el.dataset.n);
+  });
+}
+function paintCmdkSel() {
+  $('#cmdk-list').querySelectorAll('.cmdk-item').forEach((el, n) => el.classList.toggle('on', n === cmdk.sel));
+}
+function runCmdk(n) {
+  const item = cmdk.filtered[n]; if (!item) return;
+  closeCmdk(); setTimeout(() => item.run(), 60);
+}
+function focusEl(sel) { const el = $(sel); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); } }
+function openDetailsNear(sel) { const el = $(sel); if (!el) return; const d = el.closest('details'); if (d) d.open = true; focusEl(sel); }
+
+addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); cmdk.open ? closeCmdk() : openCmdk(); return; }
+  if (!cmdk.open) return;
+  if (e.key === 'Escape') { closeCmdk(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); cmdk.sel = Math.min(cmdk.filtered.length - 1, cmdk.sel + 1); paintCmdkSel(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); cmdk.sel = Math.max(0, cmdk.sel - 1); paintCmdkSel(); }
+  else if (e.key === 'Enter') { e.preventDefault(); runCmdk(cmdk.sel); }
+});
+document.getElementById('cmdk-input')?.addEventListener('input', (e) => { cmdk.sel = 0; renderCmdk(e.target.value); });
+document.getElementById('cmdkBtn')?.addEventListener('click', openCmdk);
+$('#cmdk')?.addEventListener('click', (e) => { if (e.target.id === 'cmdk') closeCmdk(); });
 
 // Developer API keys.
 async function loadKeys() {

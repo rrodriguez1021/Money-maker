@@ -59,7 +59,7 @@ function render(results) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const results = checkReadiness();
   const s = summarize(results);
-  console.log('\nDynaQR preflight\n');
+  console.log('\nQrysm preflight\n');
   console.log(render(results));
   console.log(`\n${s.fail} blocking, ${s.warn} warnings.\n`);
   process.exit(s.ok ? 0 : 1);

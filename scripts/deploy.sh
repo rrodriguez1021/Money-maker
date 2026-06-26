@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DynaQR — one-command deploy to Fly.io.
+# Qrysm — one-command deploy to Fly.io.
 # Prereqs (yours, one-time): a Fly.io account + `flyctl` installed and logged in.
 #   https://fly.io/docs/flyctl/install/   then  `fly auth login`
 set -euo pipefail

@@ -1,4 +1,4 @@
-# DynaQR API
+# Qrysm API
 
 A small REST API over JSON. Use it to create and manage dynamic QR codes and hosted
 pages from your own systems — point-of-sale, a CMS, batch jobs, etc.

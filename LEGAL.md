@@ -4,7 +4,7 @@ This project ships with a real legal layer so you're not exposed when you take o
 users. **Read this before going live.**
 
 > ⚠️ **Not legal advice.** These documents are solid starting templates generated for
-> the DynaQR software as built. They are *not* a substitute for a lawyer. Laws differ by
+> the Qrysm software as built. They are *not* a substitute for a lawyer. Laws differ by
 > country and state. Have a qualified attorney in your jurisdiction review them before you
 > accept a paying customer — it's cheap insurance compared to a dispute.
 

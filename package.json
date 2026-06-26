@@ -1,7 +1,7 @@
 {
-  "name": "dynaqr",
+  "name": "qrysm",
   "version": "1.0.0",
-  "description": "DynaQR — dynamic QR codes and link tracking SaaS. Change a QR's destination without reprinting, and track every scan.",
+  "description": "Qrysm — dynamic QR codes and link tracking SaaS. Change a QR's destination without reprinting, and track every scan.",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

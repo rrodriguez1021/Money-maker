@@ -1,4 +1,4 @@
-# 🚀 DynaQR Launch Runbook — zero to first paying customer
+# 🚀 Qrysm Launch Runbook — zero to first paying customer
 
 The product is built, tested, and revenue-ready. This is the exact ordered path to
 real money. Realistic time: **~30 minutes of setup**, then outreach. Everything here

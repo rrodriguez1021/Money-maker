@@ -1,7 +1,7 @@
-# ◧ DynaQR — Dynamic QR Codes & Link Tracking (a launch-ready micro-SaaS)
+# ◧ Qrysm — Dynamic QR Codes & Link Tracking (a launch-ready micro-SaaS)
 
 Print a QR code **once**, change where it points **forever**, and track every scan.
-Static QR codes die the moment they're printed — DynaQR codes are *dynamic*: the
+Static QR codes die the moment they're printed — Qrysm codes are *dynamic*: the
 short link behind the QR is editable any time, so a menu, flyer, business card or
 product label never goes stale. Scan analytics show what's actually working.
 
@@ -122,7 +122,7 @@ test/
 
 ## Developer API
 
-DynaQR has a REST API so customers can manage codes from their own systems — a common
+Qrysm has a REST API so customers can manage codes from their own systems — a common
 reason teams pay for a higher tier. Auth uses a Bearer **account token** or a hashed,
 revocable **API key** (`dqr_live_…`, created in the dashboard). Full reference:
 **[API.md](API.md)**.

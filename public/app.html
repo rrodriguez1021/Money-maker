@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DynaQR — Dashboard</title>
+<title>Qrysm — Dashboard</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/style.css" />
 <link rel="stylesheet" href="/legal.css" />
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">◧ DynaQR</a>
-  <nav><span id="planPill" class="pill">…</span> <a href="#" id="logout" class="btn btn-sm">Sign out</a></nav>
+  <a class="brand" href="/">◈ Qrysm</a>
+  <nav><button id="cmdkBtn" class="btn btn-sm kbd-chip">⌘K</button><span id="planPill" class="pill">…</span> <a href="#" id="logout" class="btn btn-sm">Sign out</a></nav>
 </header>
 
 <div class="app">
   <!-- Sign in / up -->
   <div id="authPanel" class="panel" style="max-width:440px;margin:40px auto;">
-    <h2 style="margin-top:0">Sign in to DynaQR</h2>
+    <h2 style="margin-top:0">Sign in to Qrysm</h2>
     <p class="muted">Enter your email to get started. We'll create your account and issue an access token (kept in this browser).</p>
     <div class="row">
       <div class="field"><input id="email" type="email" placeholder="you@example.com" /></div>
@@ -102,6 +102,14 @@
         <a href="#" id="deleteAccount" style="color:var(--danger)">Delete my account &amp; data</a>
       </p>
     </footer>
+  </div>
+</div>
+
+<div id="cmdk" class="cmdk hidden" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="cmdk-box">
+    <div class="cmdk-top"><span class="cmdk-prompt">⌘K</span><input id="cmdk-input" placeholder="Type a command or search your codes…" autocomplete="off" spellcheck="false" /></div>
+    <div id="cmdk-list" class="cmdk-list"></div>
+    <div class="cmdk-foot"><span>↑↓ navigate</span><span>↵ select</span><span>esc close</span></div>
   </div>
 </div>
 
