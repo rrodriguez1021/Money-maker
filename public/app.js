@@ -343,6 +343,8 @@ $('#exportAll').onclick = (e) => {
 async function loadLinks() {
   const wrap = $('#links');
   const { links } = await api('/api/links');
+  // Show the search box once there are enough codes to be worth filtering.
+  document.getElementById('linkFilter')?.classList.toggle('hidden', links.length < 4);
   if (!links.length) {
     wrap.innerHTML = `<div class="onboard">
       <div class="onboard-badge">◈</div>
@@ -371,6 +373,7 @@ async function loadLinks() {
       : `<button class="btn btn-sm" data-act="edit">Edit dest</button>`;
     const el = document.createElement('div');
     el.className = 'link-item';
+    el.dataset.search = `${l.title || ''} ${l.target || ''} ${l.shortUrl}`.toLowerCase();
     el.innerHTML = `
       <div class="qr-wrap"><img class="link-qr" alt="QR" src="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" /><span class="qr-sheen"></span></div>
       <div class="link-main">
@@ -388,9 +391,17 @@ async function loadLinks() {
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.png?size=1024&token=${encodeURIComponent(token)}" download="qr-${l.id}-hd.png">HD</a>
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?token=${encodeURIComponent(token)}" download="qr-${l.id}.svg">SVG</a>
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?frame=scanme&token=${encodeURIComponent(token)}" target="_blank">Poster</a>
+        <button class="btn btn-sm" data-act="dup">Dup</button>
         <button class="btn btn-sm" data-act="stats">Stats</button>
         <button class="btn btn-sm" data-act="del">✕</button>
       </div>`;
+    // Click the short URL to copy it.
+    const shortEl = el.querySelector('.short');
+    if (shortEl) {
+      shortEl.style.cursor = 'pointer'; shortEl.title = 'Click to copy';
+      shortEl.onclick = () => { navigator.clipboard?.writeText(l.shortUrl).then(() => toast('Link copied ✓')).catch(() => {}); };
+    }
+    el.querySelector('[data-act=dup]').onclick = (e) => withBusy(e.currentTarget, () => dupLink(l));
     const editBtn = el.querySelector('[data-act=edit]');
     if (editBtn) editBtn.onclick = () => editDest(l);
     const editPageBtn = el.querySelector('[data-act=editpage]');
@@ -476,6 +487,26 @@ async function delLink(l) {
   me = await api('/api/me');
   await boot();
 }
+
+async function dupLink(l) {
+  try {
+    await api('/api/links/' + l.id + '/duplicate', { method: 'POST' });
+    toast('Duplicated ✓');
+    me = await api('/api/me');
+    await boot();
+  } catch (e) {
+    if (e.data?.error === 'limit_reached') toast('Limit reached — upgrade to Pro.', true);
+    else toast('Could not duplicate', true);
+  }
+}
+
+// Filter the rendered code list by title / destination / short URL.
+document.getElementById('linkFilter')?.addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('#links .link-item').forEach((it) => {
+    it.style.display = !q || (it.dataset.search || '').includes(q) ? '' : 'none';
+  });
+});
 
 async function showStats(l, el) {
   try {

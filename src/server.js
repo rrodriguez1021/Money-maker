@@ -265,6 +265,23 @@ app.delete('/api/links/:id', auth, (req, res) => {
   res.json({ deleted: true });
 });
 
+// Duplicate a code (copies destination, title, colors, logo, style, page).
+app.post('/api/links/:id/duplicate', auth, (req, res) => {
+  const src = findLink(req.params.id);
+  if (!src || src.account_id !== req.account.id) return res.status(404).json({ error: 'not_found' });
+  const limit = planLimit(req.account.plan);
+  if (countLinks(req.account.id) >= limit.maxLinks) {
+    return res.status(402).json({ error: 'limit_reached', hint: 'Upgrade to Pro for unlimited codes.' });
+  }
+  const id = shortId();
+  const title = (src.title ? `${src.title} (copy)` : '').slice(0, 120);
+  createLink(id, req.account.id, title, src.target, now(), src.color_dark, src.color_bg);
+  if (src.page_json) setLinkPage(id, req.account.id, src.page_json);
+  if (src.logo) setLinkLogo(id, req.account.id, src.logo, src.logo_shape || 'square');
+  if (src.qr_style) setLinkStyle(id, req.account.id, src.qr_style);
+  res.status(201).json({ ...stripLogo(findLink(id)), active: true, shortUrl: `${baseUrl(req)}/r/${id}` });
+});
+
 // --- Account deletion (GDPR right to erasure) ---
 app.delete('/api/account', auth, (req, res) => {
   deleteAccount(req.account.id);

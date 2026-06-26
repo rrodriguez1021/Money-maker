@@ -283,6 +283,35 @@ test('billing portal requires billing + a stripe customer', async () => {
   assert.equal(res.status, 503);
 });
 
+test('duplicate copies a code (destination, title, style) and respects the cap', async () => {
+  const biz = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'dup@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(biz.token).id, 'business');
+  const BH = { 'Content-Type': 'application/json', Authorization: `Bearer ${biz.token}` };
+  const src = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/src', title: 'Menu', style: { gradient: { from: '#7c8cff', to: '#22e0d0' } } }),
+  }).then(j);
+
+  const dup = await fetch(`${base}/api/links/${src.id}/duplicate`, { method: 'POST', headers: BH }).then(j);
+  assert.notEqual(dup.id, src.id);
+  assert.equal(dup.target, 'https://example.com/src');
+  assert.equal(dup.title, 'Menu (copy)');
+  assert.ok(dup.qr_style && JSON.parse(dup.qr_style).gradient, 'style copied');
+
+  // Free plan hits the cap.
+  const free = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'dupfree@example.com' }),
+  }).then(j);
+  const FH = { 'Content-Type': 'application/json', Authorization: `Bearer ${free.token}` };
+  let last;
+  for (let i = 0; i < 3; i++) last = await fetch(`${base}/api/links`, { method: 'POST', headers: FH, body: JSON.stringify({ target: `example.com/${i}` }) }).then(j);
+  const blocked = await fetch(`${base}/api/links/${last.id}/duplicate`, { method: 'POST', headers: FH });
+  assert.equal(blocked.status, 402);
+});
+
 test('hosted page button clicks are tracked and reported in stats (Pro)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
