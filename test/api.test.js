@@ -465,6 +465,22 @@ test('gradient style is gated to Business, persisted, and applied', async () => 
   assert.equal(bad.qr_style, null);
 });
 
+test('preview returns a scannability verdict in headers', async () => {
+  const biz = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'scanhdr@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(biz.token).id, 'business');
+  const BH = { 'Content-Type': 'application/json', Authorization: `Bearer ${biz.token}` };
+
+  const ok = await fetch(`${base}/api/qr/preview`, { method: 'POST', headers: BH, body: JSON.stringify({ text: 'https://x.com', colorDark: '#0b0d17', colorBg: '#ffffff' }) });
+  assert.equal(ok.headers.get('X-Scan-Level'), 'ok');
+
+  const risk = await fetch(`${base}/api/qr/preview`, { method: 'POST', headers: BH, body: JSON.stringify({ text: 'https://x.com', colorDark: '#f0f0f0', colorBg: '#ffffff' }) });
+  assert.equal(risk.headers.get('X-Scan-Level'), 'risk');
+  assert.ok(risk.headers.get('X-Scan-Msg'));
+});
+
 test('account deletion erases account, links and scans (GDPR)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

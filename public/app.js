@@ -481,6 +481,14 @@ async function refreshPreview() {
       body: JSON.stringify(body),
     });
     if (!res.ok) return;
+    // Surface the scannability verdict from response headers.
+    const note = $('#scanNote');
+    if (note) {
+      const lvl = res.headers.get('X-Scan-Level') || 'ok';
+      const msg = decodeURIComponent(res.headers.get('X-Scan-Msg') || '');
+      note.className = 'scan-note ' + lvl;
+      note.textContent = lvl === 'ok' ? '✓ Scannable' : (lvl === 'warn' ? '⚠ ' + msg : '✗ ' + msg);
+    }
     const blob = await res.blob();
     const img = $('#qrPreview'); if (!img) return;
     if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);

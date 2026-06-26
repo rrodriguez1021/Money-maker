@@ -26,6 +26,7 @@ import {
   constructEvent, customerIdFromEvent, planForSubscription,
 } from './billing.js';
 import { summarizeScans } from './insights.js';
+import { assessScannability } from './scan.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -357,6 +358,11 @@ app.post('/api/qr/preview', auth, async (req, res) => {
     if (style.module) opts.module = style.module;
     if (style.eye) opts.eye = style.eye;
   }
+  // Scannability assessment surfaced via headers (the body is the PNG).
+  const assess = assessScannability({ colorDark, colorBg, gradient: style && style.gradient, hasLogo: !!opts.logo, module: opts.module });
+  res.set('X-Scan-Level', assess.level);
+  res.set('X-Scan-Contrast', String(assess.contrast));
+  if (assess.messages[0]) res.set('X-Scan-Msg', encodeURIComponent(assess.messages[0]));
   try {
     res.type('image/png').send(await qrPng(text, opts));
   } catch {
