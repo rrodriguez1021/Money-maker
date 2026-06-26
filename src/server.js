@@ -432,7 +432,7 @@ app.get('/r/:id', (req, res) => {
       // "Made with Qrysm" footer carries the owner's referral code → organic growth.
       const owner = findAccountById(link.account_id);
       const homeUrl = owner && owner.ref_code ? `${baseUrl(req)}/?ref=${owner.ref_code}` : baseUrl(req);
-      return res.type('html').send(renderPage(page, { title: link.title, homeUrl }));
+      return res.type('html').send(renderPage(page, { title: link.title, homeUrl, pageUrl: `${baseUrl(req)}/r/${link.id}` }));
     } catch {
       return res.status(500).send('page error');
     }

@@ -68,6 +68,7 @@ async function boot() {
 
   // Show brand color pickers only when the plan includes branding.
   $('#brandRow').classList.toggle('hidden', !me.limits.branding);
+  document.getElementById('pageAccentWrap')?.classList.toggle('hidden', !me.limits.branding);
   if (me.limits.branding) refreshPreview();
 
   // Upgrade buttons: offer Pro if on Free, and Business unless already on Business.
@@ -166,8 +167,11 @@ $('#pageCreateBtn').onclick = async () => {
   })).filter((b) => b.label && b.url);
   if (!headline && !buttons.length) return toast('Add a headline or at least one button', true);
   const title = $('#title').value.trim() || headline;
+  const page = { headline, subtitle, buttons };
+  const av = $('#pageAvatar')?.value.trim(); if (av) page.avatar = av;
+  if (me?.limits.branding) page.accent = $('#pageAccent')?.value;
   try {
-    await api('/api/links', { method: 'POST', body: JSON.stringify({ title, page: { headline, subtitle, buttons } }) });
+    await api('/api/links', { method: 'POST', body: JSON.stringify({ title, page }) });
     $('#pageHeadline').value = ''; $('#pageSubtitle').value = '';
     document.querySelectorAll('#pageButtons input').forEach((i) => (i.value = ''));
     toast('Hosted page QR created ✓');
@@ -378,9 +382,15 @@ function editPage(l, el) {
   }
   box = document.createElement('div');
   box.className = 'panel pageedit-box';
+  const accentField = me?.limits.branding
+    ? `<div><label>Accent</label><input class="pe-accent" type="color" value="${escapeHtml(page.accent || '#7c8cff')}" style="width:54px;height:42px;padding:4px" /></div>` : '';
   box.innerHTML = `
     <label>Headline</label><input class="pe-headline" value="${escapeHtml(page.headline || '')}" />
     <label style="margin-top:8px">Subtitle</label><input class="pe-subtitle" value="${escapeHtml(page.subtitle || '')}" />
+    <div class="row" style="margin-top:8px;align-items:flex-end">
+      <div><label>Avatar</label><input class="pe-avatar" maxlength="8" value="${escapeHtml(page.avatar || '')}" style="width:110px" /></div>
+      ${accentField}
+    </div>
     <label style="margin-top:8px">Buttons</label>${rowsHtml}
     <button class="btn btn-primary pe-save" style="margin-top:8px">Save page</button>`;
   el.after(box);
@@ -392,8 +402,11 @@ function editPage(l, el) {
       url: r.querySelector('.pe-url').value.trim(),
     })).filter((b) => b.label && b.url);
     if (!headline && !newButtons.length) return toast('Add a headline or at least one button', true);
+    const pg = { headline, subtitle, buttons: newButtons };
+    const av = box.querySelector('.pe-avatar')?.value.trim(); if (av) pg.avatar = av;
+    const ac = box.querySelector('.pe-accent')?.value; if (ac) pg.accent = ac;
     try {
-      await api('/api/links/' + l.id, { method: 'PUT', body: JSON.stringify({ page: { headline, subtitle, buttons: newButtons } }) });
+      await api('/api/links/' + l.id, { method: 'PUT', body: JSON.stringify({ page: pg }) });
       toast('Page updated ✓');
       await loadLinks();
     } catch (e) {
