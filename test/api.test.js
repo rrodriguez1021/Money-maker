@@ -105,6 +105,34 @@ test('unauthorized without token', async () => {
   assert.equal(res.status, 401);
 });
 
+test('SSE stream pushes a live scan event to the link owner', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'sse@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const link = await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/sse' }) }).then(j);
+
+  const ctrl = new AbortController();
+  const res = await fetch(`${base}/api/events?token=${token}`, { signal: ctrl.signal });
+  assert.match(res.headers.get('content-type'), /text\/event-stream/);
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+
+  // We're connected now → trigger a scan, then read until the event arrives.
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
+  let buf = '', got = false;
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline && !got) {
+    const chunk = await Promise.race([reader.read(), new Promise((r) => setTimeout(() => r({ value: undefined }), 400))]);
+    if (chunk.value) buf += dec.decode(chunk.value, { stream: true });
+    if (buf.includes('event: scan') && buf.includes(link.id)) got = true;
+  }
+  ctrl.abort();
+  await reader.cancel().catch(() => {});
+  assert.ok(got, 'received a scan event over SSE');
+});
+
 test('billing capability flags and checkout wiring (demo mode)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

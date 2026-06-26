@@ -51,10 +51,11 @@ function init() {
   });
 
   const dummy = new THREE.Object3D();
-  let mesh = null, gridSize = 0, step = 0, depths = [], assemble = 0;
+  let mesh = null, gridSize = 0, step = 0, depths = [], assemble = 0, dying = [];
 
   function build(matrix) {
-    if (mesh) { group.remove(mesh); mesh.geometry.dispose(); mesh.dispose?.(); }
+    // Crossfade: keep the old code shrinking out while the new one assembles in.
+    if (mesh) { dying.push(mesh); if (dying.length > 2) { const old = dying.shift(); group.remove(old); old.geometry.dispose(); } }
     gridSize = matrix.size;
     const idx = [];
     for (let i = 0; i < matrix.data.length; i++) if (matrix.data[i]) idx.push(i);
@@ -110,7 +111,12 @@ function init() {
   const clock = new THREE.Clock();
   function tick() {
     const dt = Math.min(0.05, clock.getDelta()), t = clock.elapsedTime;
-    if (assemble < 1) { assemble = Math.min(1, assemble + dt * 0.8); layout(assemble); }
+    if (assemble < 1) { assemble = Math.min(1, assemble + dt * 0.9); layout(assemble); }
+    // Shrink-and-dispose any outgoing codes (crossfade).
+    for (let i = dying.length - 1; i >= 0; i--) {
+      const d = dying[i]; d.scale.multiplyScalar(0.84);
+      if (d.scale.x < 0.04) { group.remove(d); d.geometry.dispose(); dying.splice(i, 1); }
+    }
     const spin = reduced ? 0 : t * 0.22;
     rot.y += ((pointer.x * 0.6 + spin) - rot.y) * 0.06;
     rot.x += ((-pointer.y * 0.4) - rot.x) * 0.06;

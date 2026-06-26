@@ -84,6 +84,25 @@ async function boot() {
   await loadLinks();
   loadKeys().catch(() => {});
   loadReferral().catch(() => {});
+  startRadar();
+}
+
+// Real-time scan radar via Server-Sent Events.
+let radarES = null, liveCount = 0;
+function startRadar() {
+  if (!token || radarES) return;
+  try {
+    radarES = new EventSource('/api/events?token=' + encodeURIComponent(token));
+    radarES.addEventListener('scan', () => { radarPing(); liveCount++; const el = $('#liveCount'); if (el) el.textContent = liveCount; });
+  } catch { /* SSE unsupported */ }
+}
+function radarPing() {
+  const r = document.getElementById('radar');
+  if (!r) return;
+  const p = document.createElement('span');
+  p.className = 'radar-ping';
+  r.appendChild(p);
+  setTimeout(() => p.remove(), 900);
 }
 
 async function loadReferral() {
@@ -304,7 +323,7 @@ async function loadLinks() {
     const el = document.createElement('div');
     el.className = 'link-item';
     el.innerHTML = `
-      <img class="link-qr" alt="QR" src="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" />
+      <div class="qr-wrap"><img class="link-qr" alt="QR" src="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" /><span class="qr-sheen"></span></div>
       <div class="link-main">
         <h4>${escapeHtml(l.title || '(untitled)')}</h4>
         <div class="small">QR → <span class="short">${l.shortUrl.replace(/^https?:\/\//, '')}</span></div>
@@ -325,6 +344,14 @@ async function loadLinks() {
     if (editBtn) editBtn.onclick = () => editDest(l);
     const editPageBtn = el.querySelector('[data-act=editpage]');
     if (editPageBtn) editPageBtn.onclick = () => editPage(l, el);
+    // Holographic 3D tilt on the QR thumbnail.
+    const qrWrap = el.querySelector('.qr-wrap');
+    el.addEventListener('pointermove', (e) => {
+      const r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width - 0.5, py = (e.clientY - r.top) / r.height - 0.5;
+      qrWrap.style.transform = `perspective(520px) rotateY(${px * 22}deg) rotateX(${-py * 22}deg) scale(1.07)`;
+    });
+    el.addEventListener('pointerleave', () => { qrWrap.style.transform = ''; });
     el.querySelector('[data-act=del]').onclick = () => delLink(l);
     el.querySelector('[data-act=stats]').onclick = () => showStats(l, el);
     wrap.appendChild(el);

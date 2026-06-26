@@ -43,6 +43,23 @@ function baseUrl(req) {
   return process.env.PUBLIC_URL || `${proto}://${req.get('host')}`;
 }
 
+// --- Real-time scan stream (Server-Sent Events). accountId → set of live clients. ---
+const sseClients = new Map();
+function sseAdd(accountId, res) {
+  if (!sseClients.has(accountId)) sseClients.set(accountId, new Set());
+  sseClients.get(accountId).add(res);
+}
+function sseRemove(accountId, res) {
+  const set = sseClients.get(accountId);
+  if (set) { set.delete(res); if (!set.size) sseClients.delete(accountId); }
+}
+function emitScan(accountId, payload) {
+  const set = sseClients.get(accountId);
+  if (!set) return;
+  const line = `event: scan\ndata: ${JSON.stringify(payload)}\n\n`;
+  for (const res of set) { try { res.write(line); } catch { /* dropped */ } }
+}
+
 // --- Stripe webhook must read the RAW body, so register it before json parser. ---
 app.post('/webhook/stripe', express.raw({ type: 'application/json' }), (req, res) => {
   const event = constructEvent(req.body, req.headers['stripe-signature']);
@@ -263,6 +280,21 @@ app.delete('/api/keys/:id', auth, (req, res) => {
   res.json({ revoked: true });
 });
 
+// --- Live scan stream for the dashboard radar. ---
+app.get('/api/events', auth, (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders?.();
+  res.write('event: ready\ndata: {}\n\n');
+  sseAdd(req.account.id, res);
+  const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 25000);
+  req.on('close', () => { clearInterval(ping); sseRemove(req.account.id, res); });
+});
+
 // --- Referrals: a shareable link + how many signups it has driven. ---
 app.get('/api/referrals', auth, (req, res) => {
   let code = req.account.ref_code;
@@ -340,7 +372,9 @@ app.post('/api/billing/checkout', auth, async (req, res) => {
 app.get('/r/:id', (req, res) => {
   const link = findLink(req.params.id);
   if (!link || !link.active) return res.status(404).sendFile(join(__dirname, '..', 'public', '404.html'));
-  recordScan(link.id, now(), req.headers.referer || req.headers.referrer, req.headers['user-agent']);
+  const ts = now();
+  recordScan(link.id, ts, req.headers.referer || req.headers.referrer, req.headers['user-agent']);
+  emitScan(link.account_id, { linkId: link.id, title: link.title, ts });
   // Hosted-page links render an HTML page; everything else 302-redirects.
   if (link.page_json) {
     try {
