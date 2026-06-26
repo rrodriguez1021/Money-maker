@@ -176,6 +176,15 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.err { border-color: var(--danger); }
 .empty { text-align: center; color: var(--muted); padding: 36px; }
+.onboard { text-align: center; padding: 30px 20px; max-width: 460px; margin: 0 auto; }
+.onboard-badge { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 14px; display: grid; place-items: center;
+  font-size: 26px; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2));
+  box-shadow: 0 14px 34px -14px var(--accent); }
+.onboard h3 { margin: 0 0 8px; font-size: 20px; }
+.onboard p { color: #c2c7dc; margin: 0 0 16px; }
+.onboard-steps { text-align: left; max-width: 360px; margin: 0 auto 20px; padding-left: 20px; color: #c2c7dc; }
+.onboard-steps li { padding: 5px 0; }
+.onboard-steps b { color: var(--ink); }
 .bars { display: flex; align-items: flex-end; gap: 4px; height: 64px; margin-top: 12px; }
 .bar { flex: 1; background: linear-gradient(var(--accent), var(--accent2)); border-radius: 4px 4px 0 0; min-height: 2px;
   transition: opacity .15s; }

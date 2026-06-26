@@ -17,6 +17,7 @@ import {
   recordScan, countScans, recentScans, dailyScans, deleteAccount,
   createApiKey, listApiKeys, findApiKeyByHash, revokeApiKey, touchApiKey,
   findAccountByRefCode, setReferredBy, setRefCode, countReferrals, setLinkStyle,
+  recordPageClick, clicksByButton,
 } from './db.js';
 import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
@@ -383,10 +384,20 @@ app.get('/api/links/:id/stats', auth, (req, res) => {
     return res.status(402).json({ error: 'upgrade_required', hint: 'Scan analytics is a Pro feature.' });
   }
   const since = now() - 30 * 86400000;
+  // For hosted pages, map button-click counts to their labels.
+  let buttonClicks = [];
+  if (link.page_json) {
+    try {
+      const buttons = (JSON.parse(link.page_json).buttons) || [];
+      const counts = Object.fromEntries(clicksByButton(link.id).map((c) => [c.btn, c.n]));
+      buttonClicks = buttons.map((b, i) => ({ label: b.label, clicks: counts[i] || 0 }));
+    } catch { /* ignore */ }
+  }
   res.json({
     total: countScans(link.id),
     daily: dailyScans(link.id, since).map((d) => ({ date: new Date(d.day * 86400000).toISOString().slice(0, 10), scans: d.n })),
     recent: recentScans(link.id, 25).map((s) => ({ ts: s.ts, referrer: s.referrer, userAgent: s.user_agent })),
+    buttonClicks,
     ...summarizeScans(recentScans(link.id, 1000000)),
   });
 });
@@ -415,6 +426,22 @@ app.post('/api/billing/checkout', auth, async (req, res) => {
   } catch (e) {
     console.error('checkout error', e);
     res.status(500).json({ error: 'checkout_failed' });
+  }
+});
+
+// Hosted-page button click → log it, then redirect to the button's destination.
+app.get('/r/:id/b/:idx', (req, res) => {
+  const link = findLink(req.params.id);
+  if (!link || !link.active || !link.page_json) return res.redirect(302, baseUrl(req));
+  try {
+    const page = JSON.parse(link.page_json);
+    const idx = Number(req.params.idx);
+    const btn = page.buttons && page.buttons[idx];
+    if (!btn || !btn.url) return res.redirect(302, baseUrl(req));
+    recordPageClick(link.id, idx, now());
+    return res.redirect(302, btn.url);
+  } catch {
+    return res.redirect(302, baseUrl(req));
   }
 });
 

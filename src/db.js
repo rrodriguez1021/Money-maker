@@ -52,9 +52,17 @@ db.exec(`
     FOREIGN KEY (account_id) REFERENCES accounts(id)
   );
 
+  CREATE TABLE IF NOT EXISTS page_clicks (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id     TEXT NOT NULL,
+    btn         INTEGER NOT NULL,
+    ts          INTEGER NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_links_account ON links(account_id);
   CREATE INDEX IF NOT EXISTS idx_scans_link ON scans(link_id);
   CREATE INDEX IF NOT EXISTS idx_api_keys_account ON api_keys(account_id);
+  CREATE INDEX IF NOT EXISTS idx_clicks_link ON page_clicks(link_id);
 `);
 
 // --- Lightweight migrations: add columns to existing databases idempotently. ---
@@ -181,6 +189,7 @@ const delScansForAccount = db.prepare(
 );
 const delLinksForAccount = db.prepare(`DELETE FROM links WHERE account_id = ?`);
 const delKeysForAccount = db.prepare(`DELETE FROM api_keys WHERE account_id = ?`);
+const delClicksForAccount = db.prepare(`DELETE FROM page_clicks WHERE link_id IN (SELECT id FROM links WHERE account_id = ?)`);
 const delAccountStmt = db.prepare(`DELETE FROM accounts WHERE id = ?`);
 
 export function deleteAccount(accountId) {
@@ -188,6 +197,7 @@ export function deleteAccount(accountId) {
   db.exec('BEGIN');
   try {
     delScansForAccount.run(accountId);
+    delClicksForAccount.run(accountId);
     delLinksForAccount.run(accountId);
     delKeysForAccount.run(accountId);
     delAccountStmt.run(accountId);
@@ -212,6 +222,12 @@ const dailyScansStmt = db.prepare(`
 
 export const recordScan = (linkId, ts, referrer, userAgent) =>
   insertScan.run(linkId, ts, referrer || null, userAgent || null);
+
+// --- Hosted-page button clicks ---
+const insertClick = db.prepare(`INSERT INTO page_clicks (link_id, btn, ts) VALUES (?, ?, ?)`);
+const clicksByBtnStmt = db.prepare(`SELECT btn, COUNT(*) AS n FROM page_clicks WHERE link_id = ? GROUP BY btn`);
+export const recordPageClick = (linkId, btn, ts) => insertClick.run(linkId, btn, ts);
+export const clicksByButton = (linkId) => clicksByBtnStmt.all(linkId);
 export const countScans = (linkId) => countScansStmt.get(linkId).n;
 export const recentScans = (linkId, limit = 25) => recentScansStmt.all(linkId, limit);
 export const dailyScans = (linkId, sinceTs) => dailyScansStmt.all(linkId, sinceTs);

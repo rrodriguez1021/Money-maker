@@ -53,9 +53,12 @@ export function renderPage(page, opts = {}) {
   const title = page.headline || opts.title || 'Qrysm page';
   const desc = page.subtitle || 'Tap to view links';
   const initial = escapeHtml((page.avatar || title.trim().charAt(0) || 'Q').toUpperCase());
-  const buttons = (page.buttons || []).map((b) =>
-    `<a class="lnk" href="${escapeHtml(b.url)}" rel="noopener nofollow">` +
-    `<span class="lnk-label">${escapeHtml(b.label)}</span><span class="chev">›</span></a>`).join('\n');
+  const buttons = (page.buttons || []).map((b, i) => {
+    // Route through the click tracker when we know the page URL; else link direct.
+    const href = opts.pageUrl ? `${opts.pageUrl}/b/${i}` : b.url;
+    return `<a class="lnk" href="${escapeHtml(href)}" rel="noopener nofollow">` +
+      `<span class="lnk-label">${escapeHtml(b.label)}</span><span class="chev">›</span></a>`;
+  }).join('\n');
   const pageUrl = escapeHtml(opts.pageUrl || '');
   return `<!doctype html>
 <html lang="en"><head>

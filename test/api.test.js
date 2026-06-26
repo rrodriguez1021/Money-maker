@@ -215,7 +215,10 @@ test('hosted page link renders HTML instead of redirecting, and logs the scan', 
   assert.match(res.headers.get('content-type'), /text\/html/);
   const html = await res.text();
   assert.match(html, /Joe&#39;s Coffee/);
-  assert.match(html, /https:\/\/example\.com\/menu/);
+  // Buttons route through the click tracker; the click then redirects to the real URL.
+  assert.match(html, new RegExp(`/r/${link.id}/b/0`));
+  const click = await fetch(`${base}/r/${link.id}/b/0`, { redirect: 'manual' });
+  assert.equal(click.headers.get('location'), 'https://example.com/menu');
 
   const { links } = await fetch(`${base}/api/links?token=${token}`).then(j);
   assert.equal(links[0].scans, 1);
@@ -237,8 +240,10 @@ test('hosted page can be edited and converted back to a redirect', async () => {
   }).then(j);
   let html = await fetch(`${base}/r/${link.id}`).then((r) => r.text());
   assert.match(html, /V2/);
-  assert.match(html, /example\.com\/b/);
   assert.doesNotMatch(html, /V1/);
+  // The edited button now points (via the tracker) to example.com/b.
+  const c = await fetch(`${base}/r/${link.id}/b/0`, { redirect: 'manual' });
+  assert.equal(c.headers.get('location'), 'https://example.com/b');
 
   // Convert it back to a plain redirect.
   await fetch(`${base}/api/links/${link.id}`, {
@@ -252,6 +257,40 @@ test('hosted page can be edited and converted back to a redirect', async () => {
   await fetch(`${base}/api/links/${link.id}`, { method: 'PUT', headers: H, body: JSON.stringify({ title: 'renamed' }) }).then(j);
   const still = await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
   assert.equal(still.headers.get('location'), 'https://example.com/final');
+});
+
+test('hosted page button clicks are tracked and reported in stats (Pro)', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'clicks@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(token).id, 'pro');
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: H, body: JSON.stringify({ page: { headline: 'Joe', buttons: [
+      { label: 'Menu', url: 'example.com/menu' }, { label: 'Call', url: 'tel:+15551234567' },
+    ] } }),
+  }).then(j);
+
+  // The rendered page routes buttons through the click tracker.
+  const html = await fetch(`${base}/r/${link.id}`).then((r) => r.text());
+  assert.match(html, new RegExp(`/r/${link.id}/b/0`));
+
+  // Click button 0 twice, button 1 once → redirects to the real URLs and logs clicks.
+  const c0 = await fetch(`${base}/r/${link.id}/b/0`, { redirect: 'manual' });
+  assert.equal(c0.status, 302);
+  assert.equal(c0.headers.get('location'), 'https://example.com/menu');
+  await fetch(`${base}/r/${link.id}/b/0`, { redirect: 'manual' });
+  await fetch(`${base}/r/${link.id}/b/1`, { redirect: 'manual' });
+
+  const stats = await fetch(`${base}/api/links/${link.id}/stats`, { headers: H }).then(j);
+  const byLabel = Object.fromEntries(stats.buttonClicks.map((b) => [b.label, b.clicks]));
+  assert.equal(byLabel.Menu, 2);
+  assert.equal(byLabel.Call, 1);
+
+  // Out-of-range button index redirects home rather than erroring.
+  const oob = await fetch(`${base}/r/${link.id}/b/9`, { redirect: 'manual' });
+  assert.equal(oob.status, 302);
 });
 
 test('bulk create respects plan cap and reports per-row results', async () => {

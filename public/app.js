@@ -315,7 +315,20 @@ async function loadLinks() {
   const wrap = $('#links');
   const { links } = await api('/api/links');
   if (!links.length) {
-    wrap.innerHTML = '<div class="empty">No QR codes yet. Create your first one above ☝️</div>';
+    wrap.innerHTML = `<div class="onboard">
+      <div class="onboard-badge">◈</div>
+      <h3>Welcome to Qrysm</h3>
+      <p>Create your first dynamic QR code — print it once, change where it points forever, and track every scan.</p>
+      <ol class="onboard-steps">
+        <li><b>Paste a destination URL</b> in the box above</li>
+        <li><b>Download</b> the QR (PNG / SVG) or a “SCAN ME” poster</li>
+        <li><b>Repoint or track</b> it anytime — the printed code never changes</li>
+      </ol>
+      <button class="btn btn-primary" id="emptyCreate">Create your first code →</button>
+      <p class="muted" style="font-size:12px;margin-top:12px">No website? <a href="#" id="emptyPage">Build a hosted page</a> instead.</p>
+    </div>`;
+    wrap.querySelector('#emptyCreate').onclick = () => focusEl('#target');
+    wrap.querySelector('#emptyPage').onclick = (e) => { e.preventDefault(); openDetailsNear('#pageHeadline'); };
     return;
   }
   wrap.innerHTML = '';
@@ -456,6 +469,7 @@ async function showStats(l, el) {
         ${breakdown('Devices', s.devices)}
         ${breakdown('Browsers', s.browsers)}
         ${breakdown('Top referrers', s.referrers)}
+        ${s.buttonClicks && s.buttonClicks.length ? breakdown('Button clicks', s.buttonClicks.map((b) => ({ name: b.label, scans: b.clicks }))) : ''}
       </div>`;
     el.after(box);
   } catch (e) {
