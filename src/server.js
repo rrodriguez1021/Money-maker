@@ -16,6 +16,7 @@ import {
   createLink, findLink, listLinks, countLinks, updateLink, deleteLink, setLinkPage, setLinkLogo,
   recordScan, countScans, recentScans, dailyScans, deleteAccount,
   createApiKey, listApiKeys, findApiKeyByHash, revokeApiKey, touchApiKey,
+  findAccountByRefCode, setReferredBy, setRefCode, countReferrals,
 } from './db.js';
 import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
@@ -34,6 +35,7 @@ const app = express();
 const shortId = customAlphabet('346789ABCDEFGHJKLMNPQRTUVWXYabcdefghijkmnpqrtwxyz', 7);
 const accountId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const tokenId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 40);
+const refId = customAlphabet('346789ABCDEFGHJKLMNPQRTUVWXYabcdefghijkmnpqrtwxyz', 8);
 const now = () => Date.now();
 
 function baseUrl(req) {
@@ -93,7 +95,13 @@ app.post('/api/signup', (req, res) => {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'invalid_email' });
   const existing = findAccountByEmail(email);
   if (existing) return res.json({ token: existing.token, plan: existing.plan, returning: true });
-  const acct = createAccount(accountId(), email, tokenId(), now());
+  const acct = createAccount(accountId(), email, tokenId(), now(), refId());
+  // Attribute the signup to a referrer if a valid ?ref code was passed through.
+  const ref = String(req.body.ref || '').trim();
+  if (ref) {
+    const referrer = findAccountByRefCode(ref);
+    if (referrer && referrer.id !== acct.id) setReferredBy(acct.id, referrer.id);
+  }
   res.json({ token: acct.token, plan: acct.plan, returning: false });
 });
 
@@ -255,6 +263,13 @@ app.delete('/api/keys/:id', auth, (req, res) => {
   res.json({ revoked: true });
 });
 
+// --- Referrals: a shareable link + how many signups it has driven. ---
+app.get('/api/referrals', auth, (req, res) => {
+  let code = req.account.ref_code;
+  if (!code) { code = refId(); setRefCode(req.account.id, code); } // backfill older accounts
+  res.json({ code, link: `${baseUrl(req)}/?ref=${code}`, count: countReferrals(req.account.id) });
+});
+
 // --- QR image for a link (PNG or SVG). The QR encodes the stable short URL. ---
 app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
   const link = findLink(req.params.id);
@@ -330,7 +345,10 @@ app.get('/r/:id', (req, res) => {
   if (link.page_json) {
     try {
       const page = JSON.parse(link.page_json);
-      return res.type('html').send(renderPage(page, { title: link.title, homeUrl: baseUrl(req) }));
+      // "Made with DynaQR" footer carries the owner's referral code → organic growth.
+      const owner = findAccountById(link.account_id);
+      const homeUrl = owner && owner.ref_code ? `${baseUrl(req)}/?ref=${owner.ref_code}` : baseUrl(req);
+      return res.type('html').send(renderPage(page, { title: link.title, homeUrl }));
     } catch {
       return res.status(500).send('page error');
     }

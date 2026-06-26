@@ -30,7 +30,8 @@ $('#signupBtn').onclick = async () => {
   const email = $('#email').value.trim();
   $('#authErr').textContent = '';
   try {
-    const r = await api('/api/signup', { method: 'POST', body: JSON.stringify({ email }) });
+    const ref = localStorage.getItem('dynaqr_ref') || undefined;
+    const r = await api('/api/signup', { method: 'POST', body: JSON.stringify({ email, ref }) });
     token = r.token;
     localStorage.setItem(TOKEN_KEY, token);
     await boot();
@@ -82,6 +83,15 @@ async function boot() {
 
   await loadLinks();
   loadKeys().catch(() => {});
+  loadReferral().catch(() => {});
+}
+
+async function loadReferral() {
+  const r = await api('/api/referrals');
+  const a = document.getElementById('refLink');
+  if (a) { a.textContent = r.link; a.href = r.link; }
+  const c = document.getElementById('refCount');
+  if (c) c.textContent = r.count;
 }
 
 async function upgrade(plan) {

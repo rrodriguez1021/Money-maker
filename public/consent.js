@@ -3,6 +3,12 @@
 // so this is a transparency notice rather than a consent gate — but it documents
 // disclosure, which helps your compliance posture.
 (function () {
+  // Capture a referral code from ?ref=… so it can be attributed at signup.
+  try {
+    var ref = new URLSearchParams(location.search).get('ref');
+    if (ref) localStorage.setItem('dynaqr_ref', ref.slice(0, 32));
+  } catch (e) { /* ignore */ }
+
   var KEY = 'dynaqr_notice_ack';
   try { if (localStorage.getItem(KEY)) return; } catch (e) { return; }
 

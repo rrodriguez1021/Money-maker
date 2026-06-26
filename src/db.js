@@ -64,6 +64,9 @@ function ensureColumn(table, column, decl) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
   }
 }
+// Referral tracking: each account gets a share code; referred_by records who sent them.
+ensureColumn('accounts', 'ref_code', 'TEXT');
+ensureColumn('accounts', 'referred_by', 'TEXT');
 // Branded-QR colors (Business tier). Null = default black-on-white.
 ensureColumn('links', 'color_dark', 'TEXT');
 ensureColumn('links', 'color_bg', 'TEXT');
@@ -86,23 +89,31 @@ export function planLimit(plan) {
 
 // --- Accounts ---
 const insertAccount = db.prepare(
-  `INSERT INTO accounts (id, email, token, plan, created_at) VALUES (?, ?, ?, 'free', ?)`
+  `INSERT INTO accounts (id, email, token, plan, created_at, ref_code) VALUES (?, ?, ?, 'free', ?, ?)`
 );
 const getAccountByToken = db.prepare(`SELECT * FROM accounts WHERE token = ?`);
 const getAccountByEmail = db.prepare(`SELECT * FROM accounts WHERE email = ?`);
 const getAccountById = db.prepare(`SELECT * FROM accounts WHERE id = ?`);
+const getAccountByRefCode = db.prepare(`SELECT * FROM accounts WHERE ref_code = ?`);
 const setPlanStmt = db.prepare(`UPDATE accounts SET plan = ?, stripe_customer = COALESCE(?, stripe_customer) WHERE id = ?`);
 const setPlanByCustomer = db.prepare(`UPDATE accounts SET plan = ? WHERE stripe_customer = ?`);
+const setReferredByStmt = db.prepare(`UPDATE accounts SET referred_by = ? WHERE id = ? AND referred_by IS NULL`);
+const setRefCodeStmt = db.prepare(`UPDATE accounts SET ref_code = ? WHERE id = ?`);
+const countReferralsStmt = db.prepare(`SELECT COUNT(*) AS n FROM accounts WHERE referred_by = ?`);
 
-export function createAccount(id, email, token, now) {
-  insertAccount.run(id, email, token, now);
+export function createAccount(id, email, token, now, refCode) {
+  insertAccount.run(id, email, token, now, refCode);
   return getAccountByToken.get(token);
 }
 export const findAccountByToken = (token) => (token ? getAccountByToken.get(token) : undefined);
 export const findAccountByEmail = (email) => getAccountByEmail.get(email);
 export const findAccountById = (id) => getAccountById.get(id);
+export const findAccountByRefCode = (code) => (code ? getAccountByRefCode.get(code) : undefined);
 export const setPlan = (accountId, plan, stripeCustomer = null) => setPlanStmt.run(plan, stripeCustomer, accountId);
 export const setPlanForCustomer = (customerId, plan) => setPlanByCustomer.run(plan, customerId);
+export const setReferredBy = (accountId, referrerId) => setReferredByStmt.run(referrerId, accountId);
+export const setRefCode = (accountId, code) => setRefCodeStmt.run(code, accountId);
+export const countReferrals = (accountId) => countReferralsStmt.get(accountId).n;
 
 // --- Links ---
 const insertLink = db.prepare(

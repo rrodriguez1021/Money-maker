@@ -355,6 +355,33 @@ test('API keys: create, authenticate a call, list masked, revoke', async () => {
   assert.equal(after.status, 401, 'revoked key rejected');
 });
 
+test('referrals: signup attribution, count, and page footer carries the code', async () => {
+  // Referrer signs up and gets a referral link.
+  const ref = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'referrer@example.com' }),
+  }).then(j);
+  const RH = { 'Content-Type': 'application/json', Authorization: `Bearer ${ref.token}` };
+  const info = await fetch(`${base}/api/referrals`, { headers: RH }).then(j);
+  assert.ok(info.code && info.link.includes(`ref=${info.code}`));
+  assert.equal(info.count, 0);
+
+  // A new user signs up carrying that ref code → attributed.
+  await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'invited@example.com', ref: info.code }),
+  }).then(j);
+  const after = await fetch(`${base}/api/referrals`, { headers: RH }).then(j);
+  assert.equal(after.count, 1, 'referral attributed');
+
+  // A hosted page owned by the referrer links its footer back with the ref code.
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: RH, body: JSON.stringify({ page: { headline: 'Hi', buttons: [{ label: 'X', url: 'example.com' }] } }),
+  }).then(j);
+  const html = await fetch(`${base}/r/${link.id}`).then((r) => r.text());
+  assert.match(html, new RegExp(`ref=${info.code}`));
+});
+
 test('account deletion erases account, links and scans (GDPR)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
