@@ -465,6 +465,25 @@ test('gradient style is gated to Business, persisted, and applied', async () => 
   assert.equal(bad.qr_style, null);
 });
 
+test('QR export supports high-res size and a SCAN ME poster frame', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'export@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const link = await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/p' }) }).then(j);
+
+  // High-res PNG honors size (within clamp).
+  const hd = await fetch(`${base}/api/links/${link.id}/qr.png?size=1024&token=${token}`);
+  assert.equal(hd.headers.get('content-type'), 'image/png');
+  assert.ok(Number(hd.headers.get('content-length')) > 1000);
+
+  // Poster frame returns SVG containing the SCAN ME label and a nested QR svg.
+  const poster = await fetch(`${base}/api/links/${link.id}/qr.svg?frame=scanme&token=${token}`).then((r) => r.text());
+  assert.match(poster, /SCAN ME/);
+  assert.ok((poster.match(/<svg/g) || []).length >= 2, 'nested QR svg inside the frame');
+});
+
 test('preview returns a scannability verdict in headers', async () => {
   const biz = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

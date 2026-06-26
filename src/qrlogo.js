@@ -259,6 +259,20 @@ function overlayLogoSvg(svg, { logo, logoShape, color, gradient }) {
   return svg.replace('</svg>', overlay + '</svg>');
 }
 
+// Wrap a rendered QR SVG in a branded "SCAN ME" poster card (vector → print-ready).
+export function frameSvg(innerSvg, { label = 'SCAN ME', accent = '#7c8cff', light = '#ffffff', size = 512 } = {}) {
+  const safe = String(label).replace(/[<>&]/g, '').slice(0, 24).toUpperCase() || 'SCAN ME';
+  const P = Math.round(size * 0.14), labelH = Math.round(size * 0.18);
+  const W = size + P * 2, H = size + P * 2 + labelH;
+  const inner = innerSvg.replace('<svg ', `<svg x="${P}" y="${P}" `);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
+    `<rect width="${W}" height="${H}" rx="${Math.round(W * 0.05)}" fill="${accent}"/>` +
+    `<rect x="${P - 8}" y="${P - 8}" width="${size + 16}" height="${size + 16}" rx="16" fill="${light}"/>` +
+    inner +
+    `<text x="${W / 2}" y="${H - P * 0.55}" text-anchor="middle" font-family="system-ui,Segoe UI,Arial,sans-serif" font-weight="800" font-size="${Math.round(labelH * 0.62)}" fill="#ffffff" letter-spacing="3">${safe}</text>` +
+    `</svg>`;
+}
+
 export async function qrSvg(text, { width = 512, color, logo, logoShape = 'square', gradient, module = 'square', eye = 'square' } = {}) {
   const ecc = logo ? 'H' : 'M';
   const custom = module !== 'square' || eye !== 'square';

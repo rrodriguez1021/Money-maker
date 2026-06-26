@@ -339,7 +339,9 @@ async function loadLinks() {
       <div class="link-actions">
         ${editAction}
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" download="qr-${l.id}.png">PNG</a>
+        <a class="btn btn-sm" href="/api/links/${l.id}/qr.png?size=1024&token=${encodeURIComponent(token)}" download="qr-${l.id}-hd.png">HD</a>
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?token=${encodeURIComponent(token)}" download="qr-${l.id}.svg">SVG</a>
+        <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?frame=scanme&token=${encodeURIComponent(token)}" target="_blank">Poster</a>
         <button class="btn btn-sm" data-act="stats">Stats</button>
         <button class="btn btn-sm" data-act="del">✕</button>
       </div>`;

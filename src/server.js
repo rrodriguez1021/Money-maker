@@ -20,7 +20,7 @@ import {
 } from './db.js';
 import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
-import { qrPng, qrSvg, qrMatrix, isValidLogo } from './qrlogo.js';
+import { qrPng, qrSvg, qrMatrix, isValidLogo, frameSvg } from './qrlogo.js';
 import {
   billingEnabled, businessBillingEnabled, annualBillingEnabled, createCheckoutSession,
   constructEvent, customerIdFromEvent, planForSubscription,
@@ -317,7 +317,8 @@ app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
   const url = `${baseUrl(req)}/r/${link.id}`;
   // Branded colors + center logo render only while the account has branding.
   const branding = planLimit(req.account.plan).branding;
-  const opts = { width: 512 };
+  const size = Math.max(128, Math.min(2048, Number(req.query.size) || 512));
+  const opts = { width: size };
   if (branding && (link.color_dark || link.color_bg)) {
     opts.color = { dark: link.color_dark || '#000000', light: link.color_bg || '#ffffff' };
   }
@@ -332,7 +333,11 @@ app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
   }
   try {
     if (req.params.fmt === 'svg') {
-      res.type('image/svg+xml').send(await qrSvg(url, opts));
+      let svg = await qrSvg(url, opts);
+      if (req.query.frame === 'scanme') {
+        svg = frameSvg(svg, { accent: (opts.color && opts.color.dark) || (opts.gradient && opts.gradient.to) || '#7c8cff', size });
+      }
+      res.type('image/svg+xml').send(svg);
     } else {
       res.type('image/png').send(await qrPng(url, opts));
     }
