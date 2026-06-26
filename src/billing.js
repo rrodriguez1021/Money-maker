@@ -46,6 +46,12 @@ export async function createCheckoutSession(account, baseUrl, plan = 'pro', peri
   });
 }
 
+// Stripe-hosted billing portal so customers can update/cancel their subscription.
+export async function createPortalSession(customerId, returnUrl) {
+  if (!billingEnabled) throw new Error('billing_disabled');
+  return stripe.billingPortal.sessions.create({ customer: customerId, return_url: returnUrl });
+}
+
 // Verify and parse a Stripe webhook. Returns the event or null if invalid.
 export function constructEvent(rawBody, signature) {
   if (!billingEnabled || !WEBHOOK_SECRET) return null;

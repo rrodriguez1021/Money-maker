@@ -259,6 +259,30 @@ test('hosted page can be edited and converted back to a redirect', async () => {
   assert.equal(still.headers.get('location'), 'https://example.com/final');
 });
 
+test('a Business hosted page QR adopts the page accent color', async () => {
+  const biz = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'pageqr@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(biz.token).id, 'business');
+  const BH = { 'Content-Type': 'application/json', Authorization: `Bearer ${biz.token}` };
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: BH, body: JSON.stringify({ page: { headline: 'Joe', accent: '#b8632b', buttons: [{ label: 'M', url: 'x.com' }] } }),
+  }).then(j);
+  const svg = await fetch(`${base}/api/links/${link.id}/qr.svg?token=${biz.token}`).then((r) => r.text());
+  assert.match(svg, /#b8632b/i);
+});
+
+test('billing portal requires billing + a stripe customer', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'portal@example.com' }),
+  }).then(j);
+  // Demo mode → billing disabled → 503.
+  const res = await fetch(`${base}/api/billing/portal`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(res.status, 503);
+});
+
 test('hosted page button clicks are tracked and reported in stats (Pro)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

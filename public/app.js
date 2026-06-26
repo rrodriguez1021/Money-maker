@@ -83,6 +83,13 @@ async function boot() {
   upBtn.onclick = () => upgrade('pro');
   bizBtn.onclick = () => upgrade('business');
 
+  // Paid users get a "Manage billing" link to the Stripe customer portal.
+  const manageBtn = $('#manageBtn');
+  if (manageBtn) {
+    manageBtn.classList.toggle('hidden', !(me.plan !== 'free' && me.billingEnabled));
+    manageBtn.onclick = manageBilling;
+  }
+
   await loadLinks();
   loadKeys().catch(() => {});
   loadReferral().catch(() => {});
@@ -113,6 +120,15 @@ async function loadReferral() {
   if (a) { a.textContent = r.link; a.href = r.link; }
   const c = document.getElementById('refCount');
   if (c) c.textContent = r.count;
+}
+
+async function manageBilling() {
+  try {
+    const r = await api('/api/billing/portal', { method: 'POST' });
+    location.href = r.url;
+  } catch (e) {
+    toast('Billing portal unavailable: ' + (e.data?.error || 'error'), true);
+  }
 }
 
 async function upgrade(plan) {

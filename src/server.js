@@ -24,7 +24,7 @@ import { sanitizePage, renderPage } from './page.js';
 import { qrPng, qrSvg, qrMatrix, isValidLogo, frameSvg } from './qrlogo.js';
 import {
   billingEnabled, businessBillingEnabled, annualBillingEnabled, createCheckoutSession,
-  constructEvent, customerIdFromEvent, planForSubscription,
+  createPortalSession, constructEvent, customerIdFromEvent, planForSubscription,
 } from './billing.js';
 import { summarizeScans } from './insights.js';
 import { assessScannability } from './scan.js';
@@ -322,6 +322,9 @@ app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
   const opts = { width: size };
   if (branding && (link.color_dark || link.color_bg)) {
     opts.color = { dark: link.color_dark || '#000000', light: link.color_bg || '#ffffff' };
+  } else if (branding && link.page_json) {
+    // A hosted page's QR defaults to the page's accent colour for brand cohesion.
+    try { const pg = JSON.parse(link.page_json); if (pg.accent) opts.color = { dark: pg.accent, light: '#ffffff' }; } catch { /* ignore */ }
   }
   if (branding && link.logo) { opts.logo = link.logo; opts.logoShape = link.logo_shape || 'square'; }
   if (branding && link.qr_style) {
@@ -426,6 +429,19 @@ app.post('/api/billing/checkout', auth, async (req, res) => {
   } catch (e) {
     console.error('checkout error', e);
     res.status(500).json({ error: 'checkout_failed' });
+  }
+});
+
+// --- Billing: open the Stripe customer portal to manage/cancel a subscription. ---
+app.post('/api/billing/portal', auth, async (req, res) => {
+  if (!billingEnabled) return res.status(503).json({ error: 'billing_disabled' });
+  if (!req.account.stripe_customer) return res.status(400).json({ error: 'no_customer', hint: 'No subscription on this account yet.' });
+  try {
+    const session = await createPortalSession(req.account.stripe_customer, `${baseUrl(req)}/app`);
+    res.json({ url: session.url });
+  } catch (e) {
+    console.error('portal error', e);
+    res.status(500).json({ error: 'portal_failed' });
   }
 });
 
