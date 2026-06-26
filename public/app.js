@@ -178,6 +178,21 @@ async function showStats(l, el) {
   }
 }
 
+// --- GDPR: delete account and all associated data ---
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'deleteAccount') {
+    e.preventDefault();
+    if (!confirm('Permanently delete your account, all your QR codes, and all scan data? This cannot be undone, and any printed codes will stop working.')) return;
+    api('/api/account', { method: 'DELETE' })
+      .then(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        alert('Your account and all associated data have been deleted.');
+        location.href = '/';
+      })
+      .catch(() => toast('Could not delete account', true));
+  }
+});
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

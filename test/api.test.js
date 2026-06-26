@@ -96,3 +96,21 @@ test('unauthorized without token', async () => {
   const res = await fetch(`${base}/api/links`);
   assert.equal(res.status, 401);
 });
+
+test('account deletion erases account, links and scans (GDPR)', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'erase@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const link = await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/x' }) }).then(j);
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual' }); // generate a scan
+
+  const del = await fetch(`${base}/api/account`, { method: 'DELETE', headers: H });
+  assert.equal(del.status, 200);
+  assert.equal((await del.json()).deleted, true);
+
+  // token is now invalid, and the link no longer resolves
+  assert.equal((await fetch(`${base}/api/me`, { headers: H })).status, 401);
+  assert.equal((await fetch(`${base}/r/${link.id}`, { redirect: 'manual' })).status, 404);
+});

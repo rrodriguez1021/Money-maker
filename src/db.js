@@ -95,6 +95,27 @@ export const updateLink = (id, accountId, title, target, active) =>
   updateLinkStmt.run(title, target, active ? 1 : 0, id, accountId);
 export const deleteLink = (id, accountId) => deleteLinkStmt.run(id, accountId);
 
+// --- Account deletion (GDPR right to erasure): remove account + its links + scans ---
+const delScansForAccount = db.prepare(
+  `DELETE FROM scans WHERE link_id IN (SELECT id FROM links WHERE account_id = ?)`
+);
+const delLinksForAccount = db.prepare(`DELETE FROM links WHERE account_id = ?`);
+const delAccountStmt = db.prepare(`DELETE FROM accounts WHERE id = ?`);
+
+export function deleteAccount(accountId) {
+  // Run as a single transaction so a partial delete can't leave orphaned data.
+  db.exec('BEGIN');
+  try {
+    delScansForAccount.run(accountId);
+    delLinksForAccount.run(accountId);
+    delAccountStmt.run(accountId);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
 // --- Scans ---
 const insertScan = db.prepare(
   `INSERT INTO scans (link_id, ts, referrer, user_agent) VALUES (?, ?, ?, ?)`

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DynaQR — Dashboard</title>
 <link rel="stylesheet" href="/style.css" />
+<link rel="stylesheet" href="/legal.css" />
 </head>
 <body>
 <header class="nav">
@@ -43,10 +44,18 @@
     </div>
 
     <div id="links" class="panel"><div class="empty">Loading…</div></div>
+
+    <footer style="text-align:left;padding:10px 0">
+      <p class="muted" style="font-size:13px">
+        <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a> ·
+        <a href="#" id="deleteAccount" style="color:var(--danger)">Delete my account &amp; data</a>
+      </p>
+    </footer>
   </div>
 </div>
 
 <div id="toast" class="toast"></div>
 <script src="/app.js"></script>
+<script src="/consent.js"></script>
 </body>
 </html>

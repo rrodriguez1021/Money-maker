@@ -60,6 +60,14 @@ npm test
 
 Test with Stripe's `4242 4242 4242 4242` test card before going live.
 
+## Protect yourself legally (read before launch)
+
+Ships with a real legal layer: **Terms of Service** (`/terms.html`), **Privacy Policy**
+(`/privacy.html`) covering scan-tracking, a cookie/tracking consent banner, and a
+GDPR/CCPA **right-to-erasure** endpoint (`DELETE /api/account`). See **[LEGAL.md](LEGAL.md)**
+for what to fill in and why each clause matters. These are solid templates — **not legal
+advice**; have an attorney review them before you take paying customers.
+
 ## Get your first paying customer
 
 The product is done — revenue is now a sales problem. **[GO-TO-MARKET.md](GO-TO-MARKET.md)**

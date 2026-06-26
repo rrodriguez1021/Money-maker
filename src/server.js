@@ -15,7 +15,7 @@ import {
   createAccount, findAccountByToken, findAccountByEmail, findAccountById,
   setPlan, setPlanForCustomer, planLimit,
   createLink, findLink, listLinks, countLinks, updateLink, deleteLink,
-  recordScan, countScans, recentScans, dailyScans,
+  recordScan, countScans, recentScans, dailyScans, deleteAccount,
 } from './db.js';
 import {
   billingEnabled, createCheckoutSession, constructEvent, customerIdFromEvent,
@@ -128,6 +128,12 @@ app.delete('/api/links/:id', auth, (req, res) => {
   const link = findLink(req.params.id);
   if (!link || link.account_id !== req.account.id) return res.status(404).json({ error: 'not_found' });
   deleteLink(link.id, req.account.id);
+  res.json({ deleted: true });
+});
+
+// --- Account deletion (GDPR right to erasure) ---
+app.delete('/api/account', auth, (req, res) => {
+  deleteAccount(req.account.id);
   res.json({ deleted: true });
 });
 
