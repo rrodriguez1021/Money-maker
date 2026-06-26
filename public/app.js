@@ -121,6 +121,32 @@ $('#createBtn').onclick = async () => {
   }
 };
 
+// Bulk create from pasted lines ("url" or "url, title" per line).
+$('#bulkBtn').onclick = async () => {
+  const lines = $('#bulkInput').value.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (!lines.length) return toast('Paste at least one URL', true);
+  const items = lines.map((line) => {
+    const i = line.indexOf(',');
+    return i === -1 ? { target: line } : { target: line.slice(0, i).trim(), title: line.slice(i + 1).trim() };
+  });
+  try {
+    const r = await api('/api/links/bulk', { method: 'POST', body: JSON.stringify({ items }) });
+    $('#bulkInput').value = '';
+    toast(`Created ${r.createdCount}${r.skippedCount ? `, skipped ${r.skippedCount}` : ''} ✓`,
+      r.createdCount === 0);
+    me = await api('/api/me');
+    await boot();
+  } catch (e) {
+    toast('Bulk create failed: ' + (e.data?.error || 'error'), true);
+  }
+};
+
+// Export all links as CSV (token in query so the browser can download directly).
+$('#exportAll').onclick = (e) => {
+  e.preventDefault();
+  window.open(`/api/links/export.csv?token=${encodeURIComponent(token)}`, '_blank');
+};
+
 async function loadLinks() {
   const wrap = $('#links');
   const { links } = await api('/api/links');
@@ -187,6 +213,8 @@ async function showStats(l, el) {
     box = document.createElement('div');
     box.className = 'panel stats-box';
     box.innerHTML = `<strong>${s.total} total scans</strong> · last 30 days
+      <a class="btn btn-sm" style="float:right" target="_blank"
+         href="/api/links/${l.id}/stats.csv?token=${encodeURIComponent(token)}">Export scans CSV</a>
       <div class="bars">${bars || '<span class="muted">no scans yet</span>'}</div>`;
     el.after(box);
   } catch (e) {

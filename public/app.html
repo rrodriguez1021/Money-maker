@@ -35,6 +35,7 @@
           <option value="monthly">Monthly</option>
           <option value="annual">Annual · 2 months free</option>
         </select>
+        <a id="exportAll" class="btn btn-sm" href="#">Export CSV</a>
         <button id="upgradeBtn" class="btn btn-primary hidden">Upgrade to Pro</button>
         <button id="businessBtn" class="btn hidden">Go Business · branded codes</button>
       </div>
@@ -52,6 +53,13 @@
         <div><label>Background</label><input id="colorBg" type="color" value="#ffffff" style="width:54px;height:42px;padding:4px" /></div>
         <span class="pill pro" style="align-self:flex-end">Business · branded codes</span>
       </div>
+      <details style="margin-top:14px">
+        <summary class="muted" style="cursor:pointer;font-size:14px">Bulk create — paste many URLs</summary>
+        <label style="margin-top:10px">One destination URL per line (optionally <code>url, title</code>)</label>
+        <textarea id="bulkInput" rows="4" placeholder="example.com/menu, Spring menu&#10;example.com/promo, Summer sale"
+          style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 14px;font:inherit"></textarea>
+        <button id="bulkBtn" class="btn" style="margin-top:8px">Create all</button>
+      </details>
     </div>
 
     <div id="links" class="panel"><div class="empty">Loading…</div></div>

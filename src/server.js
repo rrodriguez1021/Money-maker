@@ -108,6 +108,16 @@ app.get('/api/links', auth, (req, res) => {
   res.json({ links });
 });
 
+// Export all of your links (with scan counts) as CSV — your own data, any plan.
+app.get('/api/links/export.csv', auth, (req, res) => {
+  const rows = listLinks(req.account.id).map((l) => [
+    l.id, l.title, l.target, `${baseUrl(req)}/r/${l.id}`, countScans(l.id),
+    l.active ? 'active' : 'inactive', new Date(l.created_at).toISOString(),
+  ]);
+  const csv = toCsv(['id', 'title', 'destination', 'short_url', 'scans', 'status', 'created_at'], rows);
+  res.type('text/csv').set('Content-Disposition', 'attachment; filename="dynaqr-links.csv"').send(csv);
+});
+
 app.post('/api/links', auth, (req, res) => {
   const target = normalizeUrl(req.body.target);
   if (!target) return res.status(400).json({ error: 'invalid_target', hint: 'Provide a valid http(s) URL' });
@@ -120,6 +130,29 @@ app.post('/api/links', auth, (req, res) => {
   const { colorDark, colorBg } = brandColors(req.body, req.account.plan);
   const link = createLink(shortId(), req.account.id, title, target, now(), colorDark, colorBg);
   res.status(201).json({ ...link, active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
+});
+
+// Bulk create — paste many destinations at once. Respects the plan's link cap and
+// reports per-row results so a few bad URLs don't fail the whole batch.
+app.post('/api/links/bulk', auth, (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items.slice(0, 100) : null;
+  if (!items || !items.length) {
+    return res.status(400).json({ error: 'no_items', hint: 'Provide items: [{ target, title? }] (max 100).' });
+  }
+  const limit = planLimit(req.account.plan);
+  let remaining = limit.maxLinks === Infinity ? Infinity : limit.maxLinks - countLinks(req.account.id);
+  const created = [], skipped = [];
+  for (const it of items) {
+    const target = normalizeUrl(it && it.target);
+    if (!target) { skipped.push({ input: it && it.target, reason: 'invalid_target' }); continue; }
+    if (remaining <= 0) { skipped.push({ input: it.target, reason: 'limit_reached' }); continue; }
+    const title = String((it && it.title) || '').slice(0, 120);
+    const { colorDark, colorBg } = brandColors(it, req.account.plan);
+    const link = createLink(shortId(), req.account.id, title, target, now(), colorDark, colorBg);
+    created.push({ id: link.id, title: link.title, target: link.target, shortUrl: `${baseUrl(req)}/r/${link.id}` });
+    if (remaining !== Infinity) remaining--;
+  }
+  res.status(201).json({ created, skipped, createdCount: created.length, skippedCount: skipped.length });
 });
 
 app.put('/api/links/:id', auth, (req, res) => {
@@ -187,6 +220,19 @@ app.get('/api/links/:id/stats', auth, (req, res) => {
   });
 });
 
+// Per-link scan export as CSV (Pro+ analytics feature).
+app.get('/api/links/:id/stats.csv', auth, (req, res) => {
+  const link = findLink(req.params.id);
+  if (!link || link.account_id !== req.account.id) return res.status(404).json({ error: 'not_found' });
+  if (!planLimit(req.account.plan).analytics) {
+    return res.status(402).json({ error: 'upgrade_required', hint: 'Scan analytics is a Pro feature.' });
+  }
+  const rows = recentScans(link.id, 1000000)
+    .map((s) => [new Date(s.ts).toISOString(), s.referrer || '', s.user_agent || '']);
+  const csv = toCsv(['timestamp', 'referrer', 'user_agent'], rows);
+  res.type('text/csv').set('Content-Disposition', `attachment; filename="dynaqr-${link.id}-scans.csv"`).send(csv);
+});
+
 // --- Billing: start a checkout to upgrade to a paid plan (pro | business) ---
 app.post('/api/billing/checkout', auth, async (req, res) => {
   if (!billingEnabled) return res.status(503).json({ error: 'billing_disabled', hint: 'Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID.' });
@@ -215,6 +261,17 @@ app.get('/healthz', (req, res) => res.json({ ok: true, billingEnabled }));
 app.get('/app', (req, res) => res.sendFile(join(__dirname, '..', 'public', 'app.html')));
 
 app.use(express.static(join(__dirname, '..', 'public')));
+
+// Build RFC-4180-ish CSV. Quotes fields and escapes embedded quotes; prefixes a
+// leading =/+/-/@ with a quote to defuse spreadsheet formula injection.
+function toCsv(header, rows) {
+  const cell = (v) => {
+    let s = v === null || v === undefined ? '' : String(v);
+    if (/^[=+\-@]/.test(s)) s = "'" + s;
+    return '"' + s.replace(/"/g, '""') + '"';
+  };
+  return [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
+}
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 // Returns sanitized brand colors, but only if the plan allows branding; otherwise

@@ -121,11 +121,14 @@ test/
 POST   /api/signup            {email} → {token}
 GET    /api/me                account + plan + usage
 GET    /api/links             list your codes (+scan counts)
-POST   /api/links             {target,title} → new dynamic QR
-PUT    /api/links/:id         {target?,title?,active?} → repoint / rename
+POST   /api/links             {target,title,colorDark?,colorBg?} → new dynamic QR
+POST   /api/links/bulk        {items:[{target,title?}]} → create many at once
+PUT    /api/links/:id         {target?,title?,active?,colorDark?,colorBg?} → repoint / rename
 DELETE /api/links/:id
-GET    /api/links/:id/qr.png  | qr.svg     QR image
+GET    /api/links/export.csv  all your links + scan counts as CSV
+GET    /api/links/:id/qr.png  | qr.svg     QR image (branded colors on Business)
 GET    /api/links/:id/stats   scan analytics (Pro)
+GET    /api/links/:id/stats.csv  scan rows as CSV (Pro)
 POST   /api/billing/checkout  → Stripe Checkout URL (Pro upgrade)
 GET    /r/:id                 public redirect (what a scan hits)
 ```

@@ -159,6 +159,65 @@ test('branded QR colors are gated to the Business plan', async () => {
   assert.equal(me.limits.branding, true);
 });
 
+test('bulk create respects plan cap and reports per-row results', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'bulk@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  // Free plan caps at 3: send 2 valid, 1 invalid, 2 more valid → 3 created, 2 skipped.
+  const r = await fetch(`${base}/api/links/bulk`, {
+    method: 'POST', headers: H, body: JSON.stringify({ items: [
+      { target: 'example.com/1', title: 'One' }, { target: 'example.com/2' },
+      { target: 'not a url' }, { target: 'example.com/3' }, { target: 'example.com/4' },
+    ] }),
+  }).then(j);
+  assert.equal(r.createdCount, 3);
+  assert.equal(r.skippedCount, 2);
+  assert.ok(r.skipped.some((s) => s.reason === 'invalid_target'));
+  assert.ok(r.skipped.some((s) => s.reason === 'limit_reached'));
+});
+
+test('CSV export: links summary and gated scan export', async () => {
+  const biz = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'csv@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(biz.token).id, 'pro');
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${biz.token}` };
+  const link = await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/csv', title: 'CSV test' }) }).then(j);
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual' }); // one scan
+
+  const all = await fetch(`${base}/api/links/export.csv?token=${biz.token}`);
+  assert.equal(all.headers.get('content-type'), 'text/csv; charset=utf-8');
+  const body = await all.text();
+  assert.match(body, /"id","title","destination","short_url","scans","status","created_at"/);
+  assert.match(body, /CSV test/);
+
+  const scans = await fetch(`${base}/api/links/${link.id}/stats.csv?token=${biz.token}`).then((r) => r.text());
+  assert.match(scans, /"timestamp","referrer","user_agent"/);
+
+  // Free plan blocked from scan CSV
+  const free = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'csvfree@example.com' }),
+  }).then(j);
+  const FH = { Authorization: `Bearer ${free.token}` };
+  const fl = await fetch(`${base}/api/links`, { method: 'POST', headers: { ...FH, 'Content-Type': 'application/json' }, body: JSON.stringify({ target: 'example.com/x' }) }).then(j);
+  assert.equal((await fetch(`${base}/api/links/${fl.id}/stats.csv`, { headers: FH })).status, 402);
+});
+
+test('CSV export defuses spreadsheet formula injection', async () => {
+  const acct = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'inject@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${acct.token}` };
+  await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/y', title: '=SUM(A1:A9)' }) });
+  const body = await fetch(`${base}/api/links/export.csv?token=${acct.token}`).then((r) => r.text());
+  assert.match(body, /"'=SUM\(A1:A9\)"/, 'leading = is neutralized with a quote');
+});
+
 test('account deletion erases account, links and scans (GDPR)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
