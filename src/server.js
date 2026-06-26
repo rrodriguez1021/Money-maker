@@ -14,9 +14,10 @@ import { dirname, join } from 'node:path';
 import {
   createAccount, findAccountByToken, findAccountByEmail, findAccountById,
   setPlan, setPlanForCustomer, planLimit,
-  createLink, findLink, listLinks, countLinks, updateLink, deleteLink,
+  createLink, findLink, listLinks, countLinks, updateLink, deleteLink, setLinkPage,
   recordScan, countScans, recentScans, dailyScans, deleteAccount,
 } from './db.js';
+import { sanitizePage, renderPage } from './page.js';
 import {
   billingEnabled, businessBillingEnabled, annualBillingEnabled, createCheckoutSession,
   constructEvent, customerIdFromEvent, planForSubscription,
@@ -120,8 +121,15 @@ app.get('/api/links/export.csv', auth, (req, res) => {
 });
 
 app.post('/api/links', auth, (req, res) => {
-  const target = normalizeUrl(req.body.target);
-  if (!target) return res.status(400).json({ error: 'invalid_target', hint: 'Provide a valid http(s) URL' });
+  // A link is either a plain redirect (needs a valid target URL) or a hosted page.
+  const page = sanitizePage(req.body.page, planLimit(req.account.plan).branding);
+  let target;
+  if (page) {
+    target = '#page'; // hosted-page links don't redirect; /r/:id renders the page
+  } else {
+    target = normalizeUrl(req.body.target);
+    if (!target) return res.status(400).json({ error: 'invalid_target', hint: 'Provide a valid http(s) URL, or a page.' });
+  }
   const limit = planLimit(req.account.plan);
   if (countLinks(req.account.id) >= limit.maxLinks) {
     return res.status(402).json({ error: 'limit_reached', plan: req.account.plan, maxLinks: limit.maxLinks,
@@ -130,7 +138,8 @@ app.post('/api/links', auth, (req, res) => {
   const title = String(req.body.title || '').slice(0, 120);
   const { colorDark, colorBg } = brandColors(req.body, req.account.plan);
   const link = createLink(shortId(), req.account.id, title, target, now(), colorDark, colorBg);
-  res.status(201).json({ ...link, active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
+  if (page) setLinkPage(link.id, req.account.id, JSON.stringify(page));
+  res.status(201).json({ ...findLink(link.id), active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
 });
 
 // Bulk create — paste many destinations at once. Respects the plan's link cap and
@@ -254,6 +263,15 @@ app.get('/r/:id', (req, res) => {
   const link = findLink(req.params.id);
   if (!link || !link.active) return res.status(404).sendFile(join(__dirname, '..', 'public', '404.html'));
   recordScan(link.id, now(), req.headers.referer || req.headers.referrer, req.headers['user-agent']);
+  // Hosted-page links render an HTML page; everything else 302-redirects.
+  if (link.page_json) {
+    try {
+      const page = JSON.parse(link.page_json);
+      return res.type('html').send(renderPage(page, { title: link.title, homeUrl: baseUrl(req) }));
+    } catch {
+      return res.status(500).send('page error');
+    }
+  }
   res.redirect(302, link.target);
 });
 

@@ -54,6 +54,22 @@
         <span class="pill pro" style="align-self:flex-end">Business · branded codes</span>
       </div>
       <details style="margin-top:14px">
+        <summary class="muted" style="cursor:pointer;font-size:14px">Or build a hosted page — no website needed</summary>
+        <div style="margin-top:10px">
+          <label>Page headline</label>
+          <input id="pageHeadline" placeholder="Joe's Coffee" />
+          <label style="margin-top:8px">Subtitle (optional)</label>
+          <input id="pageSubtitle" placeholder="Order online · reviews · hours" />
+          <label style="margin-top:8px">Buttons (label + link)</label>
+          <div id="pageButtons">
+            <div class="row" style="margin-bottom:6px"><input class="pb-label" placeholder="View menu" /><input class="pb-url" placeholder="example.com/menu" /></div>
+            <div class="row" style="margin-bottom:6px"><input class="pb-label" placeholder="Leave a review" /><input class="pb-url" placeholder="g.page/r/..." /></div>
+            <div class="row" style="margin-bottom:6px"><input class="pb-label" placeholder="Call us" /><input class="pb-url" placeholder="tel:..." /></div>
+          </div>
+          <button id="pageCreateBtn" class="btn" style="margin-top:8px">Create page QR</button>
+        </div>
+      </details>
+      <details style="margin-top:14px">
         <summary class="muted" style="cursor:pointer;font-size:14px">Bulk create — paste many URLs</summary>
         <label style="margin-top:10px">One destination URL per line (optionally <code>url, title</code>)</label>
         <textarea id="bulkInput" rows="4" placeholder="example.com/menu, Spring menu&#10;example.com/promo, Summer sale"

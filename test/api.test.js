@@ -159,6 +159,33 @@ test('branded QR colors are gated to the Business plan', async () => {
   assert.equal(me.limits.branding, true);
 });
 
+test('hosted page link renders HTML instead of redirecting, and logs the scan', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'page@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: H, body: JSON.stringify({
+      title: 'Joe', page: { headline: 'Joe\'s Coffee', subtitle: 'Order & reviews',
+        buttons: [{ label: 'Menu', url: 'example.com/menu' }] },
+    }),
+  }).then(j);
+  assert.ok(link.page_json, 'page content stored');
+  assert.equal(link.target, '#page');
+
+  // Visiting the QR target serves HTML (not a redirect) and records a scan.
+  const res = await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/html/);
+  const html = await res.text();
+  assert.match(html, /Joe&#39;s Coffee/);
+  assert.match(html, /https:\/\/example\.com\/menu/);
+
+  const { links } = await fetch(`${base}/api/links?token=${token}`).then(j);
+  assert.equal(links[0].scans, 1);
+});
+
 test('bulk create respects plan cap and reports per-row results', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

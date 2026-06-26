@@ -121,6 +121,29 @@ $('#createBtn').onclick = async () => {
   }
 };
 
+// Create a hosted-page QR (no destination website needed).
+$('#pageCreateBtn').onclick = async () => {
+  const headline = $('#pageHeadline').value.trim();
+  const subtitle = $('#pageSubtitle').value.trim();
+  const buttons = [...document.querySelectorAll('#pageButtons .row')].map((r) => ({
+    label: r.querySelector('.pb-label').value.trim(),
+    url: r.querySelector('.pb-url').value.trim(),
+  })).filter((b) => b.label && b.url);
+  if (!headline && !buttons.length) return toast('Add a headline or at least one button', true);
+  const title = $('#title').value.trim() || headline;
+  try {
+    await api('/api/links', { method: 'POST', body: JSON.stringify({ title, page: { headline, subtitle, buttons } }) });
+    $('#pageHeadline').value = ''; $('#pageSubtitle').value = '';
+    document.querySelectorAll('#pageButtons input').forEach((i) => (i.value = ''));
+    toast('Hosted page QR created ✓');
+    me = await api('/api/me');
+    await boot();
+  } catch (e) {
+    if (e.data?.error === 'limit_reached') toast('Free limit reached — upgrade to Pro.', true);
+    else toast('Could not create page: ' + (e.data?.error || 'error'), true);
+  }
+};
+
 // Bulk create from pasted lines ("url" or "url, title" per line).
 $('#bulkBtn').onclick = async () => {
   const lines = $('#bulkInput').value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -156,6 +179,13 @@ async function loadLinks() {
   }
   wrap.innerHTML = '';
   for (const l of links) {
+    const isPage = !!l.page_json;
+    const destLine = isPage
+      ? `<div class="small">📄 Hosted landing page · <a href="${l.shortUrl}" target="_blank">open</a></div>`
+      : `<div class="small">now points to: ${escapeHtml(l.target)}</div>`;
+    const editAction = isPage
+      ? `<a class="btn btn-sm" href="${l.shortUrl}" target="_blank">Open page</a>`
+      : `<button class="btn btn-sm" data-act="edit">Edit dest</button>`;
     const el = document.createElement('div');
     el.className = 'link-item';
     el.innerHTML = `
@@ -163,20 +193,21 @@ async function loadLinks() {
       <div class="link-main">
         <h4>${escapeHtml(l.title || '(untitled)')}</h4>
         <div class="small">QR → <span class="short">${l.shortUrl.replace(/^https?:\/\//, '')}</span></div>
-        <div class="small">now points to: ${escapeHtml(l.target)}</div>
+        ${destLine}
       </div>
       <div style="text-align:center">
         <div class="scan-count">${l.scans}</div>
         <div class="small">scans</div>
       </div>
       <div class="link-actions">
-        <button class="btn btn-sm" data-act="edit">Edit dest</button>
+        ${editAction}
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" download="qr-${l.id}.png">PNG</a>
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?token=${encodeURIComponent(token)}" download="qr-${l.id}.svg">SVG</a>
         <button class="btn btn-sm" data-act="stats">Stats</button>
         <button class="btn btn-sm" data-act="del">✕</button>
       </div>`;
-    el.querySelector('[data-act=edit]').onclick = () => editDest(l);
+    const editBtn = el.querySelector('[data-act=edit]');
+    if (editBtn) editBtn.onclick = () => editDest(l);
     el.querySelector('[data-act=del]').onclick = () => delLink(l);
     el.querySelector('[data-act=stats]').onclick = () => showStats(l, el);
     wrap.appendChild(el);

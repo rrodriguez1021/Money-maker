@@ -54,6 +54,8 @@ function ensureColumn(table, column, decl) {
 // Branded-QR colors (Business tier). Null = default black-on-white.
 ensureColumn('links', 'color_dark', 'TEXT');
 ensureColumn('links', 'color_bg', 'TEXT');
+// Hosted landing page content as JSON. Null = plain redirect link.
+ensureColumn('links', 'page_json', 'TEXT');
 
 // Plan limits — the core monetization lever. Adding the Business tier (branded
 // QR colors) lifts revenue per customer: $9 Pro → $29 Business.
@@ -111,6 +113,10 @@ export const countLinks = (accountId) => countLinksStmt.get(accountId).n;
 export const updateLink = (id, accountId, title, target, active, colorDark = null, colorBg = null) =>
   updateLinkStmt.run(title, target, active ? 1 : 0, colorDark, colorBg, id, accountId);
 export const deleteLink = (id, accountId) => deleteLinkStmt.run(id, accountId);
+
+// Set/clear the hosted-page content for a link (JSON string or null).
+const setPageStmt = db.prepare(`UPDATE links SET page_json = ? WHERE id = ? AND account_id = ?`);
+export const setLinkPage = (id, accountId, pageJson) => setPageStmt.run(pageJson, id, accountId);
 
 // --- Account deletion (GDPR right to erasure): remove account + its links + scans ---
 const delScansForAccount = db.prepare(

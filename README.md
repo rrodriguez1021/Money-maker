@@ -122,6 +122,7 @@ POST   /api/signup            {email} → {token}
 GET    /api/me                account + plan + usage
 GET    /api/links             list your codes (+scan counts)
 POST   /api/links             {target,title,colorDark?,colorBg?} → new dynamic QR
+                              or {page:{headline,subtitle,buttons[]}} → hosted-page QR
 POST   /api/links/bulk        {items:[{target,title?}]} → create many at once
 PUT    /api/links/:id         {target?,title?,active?,colorDark?,colorBg?} → repoint / rename
 DELETE /api/links/:id
