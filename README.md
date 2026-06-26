@@ -81,6 +81,10 @@ playbook, and a 7-day launch checklist to the first dollar.
 
 ## Deploy
 
+**Fastest path:** follow the **[LAUNCH.md](LAUNCH.md)** runbook (deploy → Stripe → first
+customer). One command: `./scripts/deploy.sh` (Fly.io). Run `npm run preflight` first to
+catch config gaps (e.g. a missing Stripe webhook secret that would stop upgrades working).
+
 One-click configs are in [`deploy/`](deploy/): `fly.toml` (Fly.io) and `render.yaml`
 (Render Blueprint). Or use **Docker** directly (works on Fly.io, Render, Railway, a VPS, etc.):
 
