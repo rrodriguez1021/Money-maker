@@ -20,7 +20,7 @@ import {
 } from './db.js';
 import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
-import { qrPng, qrSvg, isValidLogo } from './qrlogo.js';
+import { qrPng, qrSvg, qrMatrix, isValidLogo } from './qrlogo.js';
 import {
   billingEnabled, businessBillingEnabled, annualBillingEnabled, createCheckoutSession,
   constructEvent, customerIdFromEvent, planForSubscription,
@@ -354,6 +354,16 @@ app.get('/r/:id', (req, res) => {
     }
   }
   res.redirect(302, link.target);
+});
+
+// Public, unauthenticated QR matrix for the landing "forge" 3D preview (no link created).
+app.get('/api/demo-qr', (req, res) => {
+  const text = String(req.query.text || '').slice(0, 280) || 'https://qrysm.app';
+  try {
+    res.json(qrMatrix(text));
+  } catch {
+    res.status(400).json({ error: 'bad_text' });
+  }
 });
 
 app.get('/healthz', (req, res) => res.json({ ok: true, billingEnabled }));

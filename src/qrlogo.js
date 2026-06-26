@@ -38,6 +38,13 @@ function scale(src, tw, th) {
   return dst;
 }
 
+// Return the raw module grid (1 = dark) for building a QR in the client (e.g. the
+// 3D hero "forge"). No image — just the matrix.
+export function qrMatrix(text, ecc = 'M') {
+  const qr = QRCode.create(String(text || ''), { errorCorrectionLevel: ecc });
+  return { size: qr.modules.size, data: Array.from(qr.modules.data) };
+}
+
 export async function qrPng(text, { width = 512, color, logo } = {}) {
   const ecc = logo ? 'H' : 'M';
   const buf = await QRCode.toBuffer(text, { width, margin: 1, errorCorrectionLevel: ecc, color });
