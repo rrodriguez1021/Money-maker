@@ -18,8 +18,8 @@ import {
   recordScan, countScans, recentScans, dailyScans, deleteAccount,
 } from './db.js';
 import {
-  billingEnabled, businessBillingEnabled, createCheckoutSession, constructEvent,
-  customerIdFromEvent, planForSubscription,
+  billingEnabled, businessBillingEnabled, annualBillingEnabled, createCheckoutSession,
+  constructEvent, customerIdFromEvent, planForSubscription,
 } from './billing.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -96,6 +96,7 @@ app.get('/api/me', auth, (req, res) => {
     used: countLinks(req.account.id),
     billingEnabled,
     businessBillingEnabled,
+    annualBillingEnabled,
   });
 });
 
@@ -190,8 +191,9 @@ app.get('/api/links/:id/stats', auth, (req, res) => {
 app.post('/api/billing/checkout', auth, async (req, res) => {
   if (!billingEnabled) return res.status(503).json({ error: 'billing_disabled', hint: 'Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID.' });
   const plan = req.body.plan === 'business' ? 'business' : 'pro';
+  const period = req.body.period === 'annual' ? 'annual' : 'monthly';
   try {
-    const session = await createCheckoutSession(req.account, baseUrl(req), plan);
+    const session = await createCheckoutSession(req.account, baseUrl(req), plan, period);
     res.json({ url: session.url });
   } catch (e) {
     console.error('checkout error', e);

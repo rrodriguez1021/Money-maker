@@ -30,7 +30,11 @@
   <div id="mainApp" class="hidden">
     <div class="appbar">
       <div><strong id="emailLabel"></strong> <span id="usage" class="muted"></span></div>
-      <div class="row">
+      <div class="row" style="align-items:center">
+        <select id="period" class="hidden" style="width:auto">
+          <option value="monthly">Monthly</option>
+          <option value="annual">Annual · 2 months free</option>
+        </select>
         <button id="upgradeBtn" class="btn btn-primary hidden">Upgrade to Pro</button>
         <button id="businessBtn" class="btn hidden">Go Business · branded codes</button>
       </div>

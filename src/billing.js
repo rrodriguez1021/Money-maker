@@ -4,32 +4,42 @@
 import Stripe from 'stripe';
 
 const KEY = process.env.STRIPE_SECRET_KEY;
-const PRICE_ID = process.env.STRIPE_PRICE_ID;                   // recurring Price for Pro
-const PRICE_ID_BUSINESS = process.env.STRIPE_PRICE_ID_BUSINESS; // recurring Price for Business (optional)
+const PRICE_ID = process.env.STRIPE_PRICE_ID;                   // Pro, monthly
+const PRICE_ID_ANNUAL = process.env.STRIPE_PRICE_ID_ANNUAL;     // Pro, annual (optional)
+const PRICE_ID_BUSINESS = process.env.STRIPE_PRICE_ID_BUSINESS; // Business, monthly (optional)
+const PRICE_ID_BUSINESS_ANNUAL = process.env.STRIPE_PRICE_ID_BUSINESS_ANNUAL; // Business, annual (optional)
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
 export const billingEnabled = Boolean(KEY && PRICE_ID);
 const stripe = billingEnabled ? new Stripe(KEY) : null;
 
-// Map a plan name to its configured Stripe Price. Business falls back to Pro's
-// price if a dedicated Business price isn't configured.
-const PRICE_FOR = () => ({
-  pro: PRICE_ID,
-  business: PRICE_ID_BUSINESS || PRICE_ID,
-});
+// Resolve a (plan, period) pair to a configured Stripe Price, falling back to the
+// nearest configured option so partial setups still work.
+function priceFor(plan, period) {
+  const annual = period === 'annual';
+  if (plan === 'business') {
+    return (annual && PRICE_ID_BUSINESS_ANNUAL) || PRICE_ID_BUSINESS
+      || (annual && PRICE_ID_ANNUAL) || PRICE_ID;
+  }
+  return (annual && PRICE_ID_ANNUAL) || PRICE_ID;
+}
 
 export const businessBillingEnabled = Boolean(KEY && PRICE_ID_BUSINESS);
+export const annualBillingEnabled = Boolean(KEY && PRICE_ID_ANNUAL);
 
-export async function createCheckoutSession(account, baseUrl, plan = 'pro') {
+// Every price id that represents the Business plan, for webhook plan mapping.
+const BUSINESS_PRICES = new Set([PRICE_ID_BUSINESS, PRICE_ID_BUSINESS_ANNUAL].filter(Boolean));
+
+export async function createCheckoutSession(account, baseUrl, plan = 'pro', period = 'monthly') {
   if (!billingEnabled) throw new Error('billing_disabled');
-  const price = PRICE_FOR()[plan];
+  const price = priceFor(plan, period);
   if (!price) throw new Error('unknown_plan');
   return stripe.checkout.sessions.create({
     mode: 'subscription',
     line_items: [{ price, quantity: 1 }],
     customer_email: account.email,
     client_reference_id: account.id,
-    metadata: { plan },
+    metadata: { plan, period },
     success_url: `${baseUrl}/app?upgraded=1`,
     cancel_url: `${baseUrl}/app?canceled=1`,
     allow_promotion_codes: true,
@@ -55,6 +65,5 @@ export async function customerIdFromEvent(event) {
 // its line-item price, so an "updated" event doesn't downgrade Business to Pro.
 export function planForSubscription(sub) {
   const priceId = sub?.items?.data?.[0]?.price?.id;
-  if (PRICE_ID_BUSINESS && priceId === PRICE_ID_BUSINESS) return 'business';
-  return 'pro';
+  return BUSINESS_PRICES.has(priceId) ? 'business' : 'pro';
 }

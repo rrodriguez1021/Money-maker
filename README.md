@@ -26,6 +26,8 @@ The monetization is built in:
 
 The free tier drives signups; the code limit + analytics gate drive Pro upgrades; branded
 colors (the #1 upsell in this market) drive Business upgrades and lift revenue per customer.
+**Annual billing** ($90/yr Pro, $290/yr Business — 2 months free) is supported too, which
+pulls a year of cash forward and reduces churn; add the annual Price IDs to enable it.
 Billing runs through **Stripe Checkout** (subscriptions) with webhook-driven plan
 sync. Change the price, limits, and tiers in `src/db.js` (`PLAN_LIMITS`) — it's your product.
 

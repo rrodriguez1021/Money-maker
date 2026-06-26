@@ -71,8 +71,12 @@ async function boot() {
   // Upgrade buttons: offer Pro if on Free, and Business unless already on Business.
   const upBtn = $('#upgradeBtn');
   const bizBtn = $('#businessBtn');
-  upBtn.classList.toggle('hidden', me.plan !== 'free');
-  bizBtn.classList.toggle('hidden', me.plan === 'business');
+  const showPro = me.plan === 'free';
+  const showBiz = me.plan !== 'business';
+  upBtn.classList.toggle('hidden', !showPro);
+  bizBtn.classList.toggle('hidden', !showBiz);
+  // The annual/monthly toggle is only useful when an upgrade is offered and annual is configured.
+  $('#period').classList.toggle('hidden', !(showPro || showBiz) || !me.annualBillingEnabled);
   upBtn.onclick = () => upgrade('pro');
   bizBtn.onclick = () => upgrade('business');
 
@@ -86,8 +90,9 @@ async function upgrade(plan) {
   if (plan === 'business' && !me.businessBillingEnabled) {
     return toast('Set STRIPE_PRICE_ID_BUSINESS to sell the Business tier.', true);
   }
+  const period = $('#period').value || 'monthly';
   try {
-    const r = await api('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ plan }) });
+    const r = await api('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ plan, period }) });
     location.href = r.url;
   } catch (e) {
     toast('Checkout unavailable: ' + (e.data?.error || 'error'), true);

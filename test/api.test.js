@@ -98,6 +98,26 @@ test('unauthorized without token', async () => {
   assert.equal(res.status, 401);
 });
 
+test('billing capability flags and checkout wiring (demo mode)', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'billing@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+
+  const me = await fetch(`${base}/api/me`, { headers: H }).then(j);
+  assert.equal(me.billingEnabled, false);
+  assert.equal(me.businessBillingEnabled, false);
+  assert.equal(me.annualBillingEnabled, false);
+
+  // The route must accept plan + period without erroring; in demo mode it returns 503.
+  const res = await fetch(`${base}/api/billing/checkout`, {
+    method: 'POST', headers: H, body: JSON.stringify({ plan: 'business', period: 'annual' }),
+  });
+  assert.equal(res.status, 503);
+  assert.equal((await res.json()).error, 'billing_disabled');
+});
+
 test('branded QR colors are gated to the Business plan', async () => {
   // Free account: colors are ignored and stored as null.
   const free = await fetch(`${base}/api/signup`, {
