@@ -15,6 +15,7 @@
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
 </head>
 <body class="qrysm">
+<div id="intro" class="intro" aria-hidden="true"><div class="intro-mark">◈ Qrysm</div><div class="intro-sub">one code · infinite destinations</div></div>
 <div class="grid-horizon" aria-hidden="true"></div>
 
 <header class="nav">
@@ -50,24 +51,24 @@
   </section>
 
   <section class="features">
-    <div class="card">
+    <div class="card" data-reveal>
       <h3>✦ Editable destination</h3>
       <p>Repoint a printed code to a new URL in one click. No reprinting menus, flyers, or packaging — ever.</p>
     </div>
-    <div class="card">
+    <div class="card" data-reveal style="transition-delay:.08s">
       <h3>◎ Scan intelligence</h3>
       <p>Live scan pulses, daily trends, device / browser / referrer breakdowns. See what's actually working.</p>
     </div>
-    <div class="card">
+    <div class="card" data-reveal style="transition-delay:.16s">
       <h3>◈ Holographic &amp; branded</h3>
       <p>Custom colors, a logo in the center, and hosted pages — codes that look as premium as your brand.</p>
     </div>
   </section>
 
   <section id="pricing" class="pricing">
-    <h2>Simple pricing</h2>
+    <h2 data-reveal>Simple pricing</h2>
     <div class="plans">
-      <div class="plan">
+      <div class="plan" data-reveal>
         <h3>Free</h3>
         <p class="price">$0</p>
         <ul>
@@ -78,7 +79,7 @@
         </ul>
         <a href="/app" class="btn btn-block">Start free</a>
       </div>
-      <div class="plan featured">
+      <div class="plan featured" data-reveal style="transition-delay:.08s">
         <div class="badge">Most popular</div>
         <h3>Pro</h3>
         <p class="price">$9<span>/mo</span></p>
@@ -92,7 +93,7 @@
         <p class="muted" style="font-size:13px;margin:0 0 12px">or $90/yr — 2 months free</p>
         <a href="/app" class="btn btn-block btn-primary">Go Pro</a>
       </div>
-      <div class="plan">
+      <div class="plan" data-reveal style="transition-delay:.16s">
         <h3>Business</h3>
         <p class="price">$29<span>/mo</span></p>
         <ul>
@@ -113,6 +114,7 @@
   <p>◈ Qrysm · <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a> · <a href="/healthz">status</a></p>
 </footer>
 
+<script src="/reveal.js"></script>
 <script type="module" src="/hero.js"></script>
 <script src="/consent.js"></script>
 </body>

@@ -191,6 +191,25 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
 }
 
 /* ============ Qrysm — holographic command deck ============ */
+/* Intro reveal */
+.intro { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; gap: 10px;
+  background: radial-gradient(80% 60% at 50% 40%, #12152e, #07080f 70%); transition: opacity .6s ease; }
+.intro.hide { opacity: 0; pointer-events: none; }
+.intro-mark { font-size: clamp(30px, 7vw, 60px); font-weight: 800; letter-spacing: -1.5px;
+  background: linear-gradient(110deg, var(--accent), var(--accent2) 55%, var(--cyan));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: intropop 1.15s cubic-bezier(.2,.7,.2,1) both; }
+.intro-sub { font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 3px;
+  color: var(--muted); text-transform: uppercase; animation: introsub 1.15s ease both; }
+@keyframes intropop { 0% { opacity: 0; transform: translateY(12px) scale(.96); filter: blur(8px); } 55% { opacity: 1; filter: blur(0); } }
+@keyframes introsub { 0%, 40% { opacity: 0; } 100% { opacity: 1; } }
+[data-reveal] { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+[data-reveal].in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .intro { display: none !important; }
+  [data-reveal] { opacity: 1 !important; transform: none !important; }
+}
+
 .qrysm { position: relative; overflow-x: hidden; }
 .grid-horizon {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;

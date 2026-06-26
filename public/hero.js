@@ -118,9 +118,14 @@ function init() {
       if (d.scale.x < 0.04) { group.remove(d); d.geometry.dispose(); dying.splice(i, 1); }
     }
     const spin = reduced ? 0 : t * 0.22;
+    // Scroll-driven depth: the code tilts back, drifts up, and the camera dollies out.
+    const s = Math.min(1, (window.scrollY || 0) / (window.innerHeight || 800));
     rot.y += ((pointer.x * 0.6 + spin) - rot.y) * 0.06;
-    rot.x += ((-pointer.y * 0.4) - rot.x) * 0.06;
+    rot.x += ((-pointer.y * 0.4 - s * 0.7) - rot.x) * 0.06;
     group.rotation.set(rot.x, rot.y, 0);
+    group.position.y = s * 1.4;
+    group.position.z = -s * 2.2;
+    camera.position.z = 7 + s * 2.6;
     if (!reduced) { l1.position.x = Math.sin(t * 0.6) * 6; l2.position.y = Math.cos(t * 0.5) * 5; }
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
