@@ -1,0 +1,26 @@
+# One-click deploy to Render.com: New > Blueprint > point at this repo.
+# Free web service + a persistent disk for the SQLite database.
+services:
+  - type: web
+    name: dynaqr
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: DB_PATH
+        value: /data/dynaqr.db
+      - key: PUBLIC_URL
+        sync: false   # set to your https://<service>.onrender.com URL after first deploy
+      - key: STRIPE_SECRET_KEY
+        sync: false   # optional — add to enable real billing
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+    disk:
+      name: dynaqr-data
+      mountPath: /data
+      sizeGB: 1

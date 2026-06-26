@@ -60,9 +60,16 @@ npm test
 
 Test with Stripe's `4242 4242 4242 4242` test card before going live.
 
+## Get your first paying customer
+
+The product is done — revenue is now a sales problem. **[GO-TO-MARKET.md](GO-TO-MARKET.md)**
+is a complete kit: who pays for dynamic QR codes, cold-email/DM templates, a pricing
+playbook, and a 7-day launch checklist to the first dollar.
+
 ## Deploy
 
-**Docker** (works on Fly.io, Render, Railway, a VPS, etc.):
+One-click configs are in [`deploy/`](deploy/): `fly.toml` (Fly.io) and `render.yaml`
+(Render Blueprint). Or use **Docker** directly (works on Fly.io, Render, Railway, a VPS, etc.):
 
 ```bash
 docker build -t dynaqr .
