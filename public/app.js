@@ -81,6 +81,7 @@ async function boot() {
   bizBtn.onclick = () => upgrade('business');
 
   await loadLinks();
+  loadKeys().catch(() => {});
 }
 
 async function upgrade(plan) {
@@ -143,6 +144,37 @@ $('#pageCreateBtn').onclick = async () => {
   } catch (e) {
     if (e.data?.error === 'limit_reached') toast('Free limit reached — upgrade to Pro.', true);
     else toast('Could not create page: ' + (e.data?.error || 'error'), true);
+  }
+};
+
+// Developer API keys.
+async function loadKeys() {
+  const wrap = document.getElementById('keysList');
+  if (!wrap) return;
+  const { keys } = await api('/api/keys');
+  if (!keys.length) { wrap.innerHTML = '<div class="muted" style="font-size:13px">No keys yet.</div>'; return; }
+  wrap.innerHTML = keys.map((k) => `
+    <div class="bd-row">
+      <span>${escapeHtml(k.name || '(unnamed)')} · <span class="short">${escapeHtml(k.prefix)}</span>${k.revoked ? ' <span class="muted">(revoked)</span>' : ''}</span>
+      ${k.revoked ? '' : `<button class="btn btn-sm" data-revoke="${k.id}">Revoke</button>`}
+    </div>`).join('');
+  wrap.querySelectorAll('[data-revoke]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('Revoke this key? Apps using it will stop working immediately.')) return;
+    await api('/api/keys/' + b.dataset.revoke, { method: 'DELETE' });
+    toast('Key revoked');
+    loadKeys();
+  }));
+}
+
+document.getElementById('createKeyBtn').onclick = async () => {
+  const name = document.getElementById('keyName').value.trim();
+  try {
+    const r = await api('/api/keys', { method: 'POST', body: JSON.stringify({ name }) });
+    document.getElementById('keyName').value = '';
+    window.prompt('Copy your API key now — it will NOT be shown again:', r.key);
+    loadKeys();
+  } catch (e) {
+    toast('Could not create key: ' + (e.data?.error || 'error'), true);
   }
 };
 

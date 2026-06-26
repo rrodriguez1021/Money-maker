@@ -40,8 +40,21 @@ db.exec(`
     FOREIGN KEY (link_id) REFERENCES links(id)
   );
 
+  CREATE TABLE IF NOT EXISTS api_keys (
+    id          TEXT PRIMARY KEY,
+    account_id  TEXT NOT NULL,
+    name        TEXT NOT NULL DEFAULT '',
+    key_hash    TEXT UNIQUE NOT NULL,   -- sha256 of the secret; the secret itself is never stored
+    prefix      TEXT NOT NULL,          -- first chars, for display only
+    created_at  INTEGER NOT NULL,
+    last_used   INTEGER,
+    revoked     INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (account_id) REFERENCES accounts(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_links_account ON links(account_id);
   CREATE INDEX IF NOT EXISTS idx_scans_link ON scans(link_id);
+  CREATE INDEX IF NOT EXISTS idx_api_keys_account ON api_keys(account_id);
 `);
 
 // --- Lightweight migrations: add columns to existing databases idempotently. ---
@@ -124,11 +137,31 @@ export const setLinkPage = (id, accountId, pageJson) => setPageStmt.run(pageJson
 const setLogoStmt = db.prepare(`UPDATE links SET logo = ? WHERE id = ? AND account_id = ?`);
 export const setLinkLogo = (id, accountId, logo) => setLogoStmt.run(logo, id, accountId);
 
+// --- API keys (programmatic access). Only the sha256 hash is stored. ---
+const insertApiKey = db.prepare(
+  `INSERT INTO api_keys (id, account_id, name, key_hash, prefix, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+);
+const listApiKeysStmt = db.prepare(
+  `SELECT id, name, prefix, created_at, last_used, revoked FROM api_keys WHERE account_id = ? ORDER BY created_at DESC`
+);
+const findKeyByHash = db.prepare(`SELECT * FROM api_keys WHERE key_hash = ? AND revoked = 0`);
+const revokeKeyStmt = db.prepare(`UPDATE api_keys SET revoked = 1 WHERE id = ? AND account_id = ?`);
+const touchKeyStmt = db.prepare(`UPDATE api_keys SET last_used = ? WHERE id = ?`);
+
+export function createApiKey(id, accountId, name, keyHash, prefix, now) {
+  insertApiKey.run(id, accountId, name, keyHash, prefix, now);
+}
+export const listApiKeys = (accountId) => listApiKeysStmt.all(accountId);
+export const findApiKeyByHash = (hash) => findKeyByHash.get(hash);
+export const revokeApiKey = (id, accountId) => revokeKeyStmt.run(id, accountId);
+export const touchApiKey = (id, ts) => touchKeyStmt.run(ts, id);
+
 // --- Account deletion (GDPR right to erasure): remove account + its links + scans ---
 const delScansForAccount = db.prepare(
   `DELETE FROM scans WHERE link_id IN (SELECT id FROM links WHERE account_id = ?)`
 );
 const delLinksForAccount = db.prepare(`DELETE FROM links WHERE account_id = ?`);
+const delKeysForAccount = db.prepare(`DELETE FROM api_keys WHERE account_id = ?`);
 const delAccountStmt = db.prepare(`DELETE FROM accounts WHERE id = ?`);
 
 export function deleteAccount(accountId) {
@@ -137,6 +170,7 @@ export function deleteAccount(accountId) {
   try {
     delScansForAccount.run(accountId);
     delLinksForAccount.run(accountId);
+    delKeysForAccount.run(accountId);
     delAccountStmt.run(accountId);
     db.exec('COMMIT');
   } catch (e) {

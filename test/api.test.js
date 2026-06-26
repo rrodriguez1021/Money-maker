@@ -326,6 +326,35 @@ test('center logo is gated to Business, validated, and never leaked in list', as
   assert.equal(after.links.find((l) => l.id === bl.id).hasLogo, false);
 });
 
+test('API keys: create, authenticate a call, list masked, revoke', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'apikeys@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+
+  // Create a key — full secret returned exactly once.
+  const made = await fetch(`${base}/api/keys`, { method: 'POST', headers: H, body: JSON.stringify({ name: 'POS' }) }).then(j);
+  assert.match(made.key, /^dqr_live_/);
+
+  // The key authenticates an API call.
+  const KH = { 'Content-Type': 'application/json', Authorization: `Bearer ${made.key}` };
+  const link = await fetch(`${base}/api/links`, { method: 'POST', headers: KH, body: JSON.stringify({ target: 'example.com/via-key' }) });
+  assert.equal(link.status, 201);
+
+  // Listing never exposes the raw secret — only a prefix.
+  const { keys } = await fetch(`${base}/api/keys`, { headers: H }).then(j);
+  assert.equal(keys.length, 1);
+  assert.ok(!('key_hash' in keys[0]), 'hash not exposed');
+  assert.ok(keys[0].prefix.startsWith('dqr_live_'));
+  assert.ok(!keys.some((k) => k.prefix.length > 30), 'only a prefix is shown');
+
+  // Revoke → the key stops working.
+  await fetch(`${base}/api/keys/${keys[0].id}`, { method: 'DELETE', headers: H }).then(j);
+  const after = await fetch(`${base}/api/links`, { headers: { Authorization: `Bearer ${made.key}` } });
+  assert.equal(after.status, 401, 'revoked key rejected');
+});
+
 test('account deletion erases account, links and scans (GDPR)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

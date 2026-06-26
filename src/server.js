@@ -15,7 +15,9 @@ import {
   setPlan, setPlanForCustomer, planLimit,
   createLink, findLink, listLinks, countLinks, updateLink, deleteLink, setLinkPage, setLinkLogo,
   recordScan, countScans, recentScans, dailyScans, deleteAccount,
+  createApiKey, listApiKeys, findApiKeyByHash, revokeApiKey, touchApiKey,
 } from './db.js';
+import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
 import { qrPng, qrSvg, isValidLogo } from './qrlogo.js';
 import {
@@ -67,11 +69,21 @@ app.use(express.urlencoded({ extended: false }));
 
 // --- Auth: lightweight token-based accounts. POST an email, get a token.
 // For an MVP this is passwordless-by-token; swap in magic-link email in prod. ---
+const sha256 = (s) => createHash('sha256').update(String(s)).digest('hex');
+
 function auth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.token;
-  const account = findAccountByToken(token);
-  if (!account) return res.status(401).json({ error: 'unauthorized', hint: 'Pass Bearer token from /api/signup' });
+  let account = findAccountByToken(token);
+  // Also accept a programmatic API key (dqr_live_…). Stored hashed, so hash & look up.
+  if (!account && typeof token === 'string' && token.startsWith('dqr_')) {
+    const row = findApiKeyByHash(sha256(token));
+    if (row) {
+      account = findAccountById(row.account_id);
+      if (account) touchApiKey(row.id, now());
+    }
+  }
+  if (!account) return res.status(401).json({ error: 'unauthorized', hint: 'Pass a Bearer token from /api/signup or an API key.' });
   req.account = account;
   next();
 }
@@ -223,6 +235,24 @@ app.delete('/api/links/:id', auth, (req, res) => {
 app.delete('/api/account', auth, (req, res) => {
   deleteAccount(req.account.id);
   res.json({ deleted: true });
+});
+
+// --- API keys: programmatic access. The full secret is shown once, then only hashed. ---
+app.get('/api/keys', auth, (req, res) => {
+  res.json({ keys: listApiKeys(req.account.id).map((k) => ({ ...k, revoked: !!k.revoked })) });
+});
+
+app.post('/api/keys', auth, (req, res) => {
+  const name = String(req.body.name || '').slice(0, 60);
+  const secret = 'dqr_live_' + tokenId();
+  const prefix = secret.slice(0, 17) + '…';
+  createApiKey(accountId(), req.account.id, name, sha256(secret), prefix, now());
+  res.status(201).json({ key: secret, prefix, name, note: 'Store this secret now — it will not be shown again.' });
+});
+
+app.delete('/api/keys/:id', auth, (req, res) => {
+  revokeApiKey(req.params.id, req.account.id);
+  res.json({ revoked: true });
 });
 
 // --- QR image for a link (PNG or SVG). The QR encodes the stable short URL. ---

@@ -81,6 +81,17 @@
 
     <div id="links" class="panel"><div class="empty">Loading…</div></div>
 
+    <details class="panel" id="apiPanel">
+      <summary style="cursor:pointer;font-weight:600">Developer API keys</summary>
+      <p class="muted" style="font-size:13px;margin-top:10px">Manage QR codes from your own systems. Use a key as a Bearer token:
+        <code style="background:var(--panel2);padding:2px 6px;border-radius:5px">Authorization: Bearer dqr_live_…</code></p>
+      <div class="row" style="margin-bottom:12px">
+        <input id="keyName" placeholder="Key name (e.g. POS integration)" />
+        <button id="createKeyBtn" class="btn btn-primary">Create key</button>
+      </div>
+      <div id="keysList"></div>
+    </details>
+
     <footer style="text-align:left;padding:10px 0">
       <p class="muted" style="font-size:13px">
         <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a> ·

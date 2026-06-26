@@ -120,6 +120,13 @@ test/
 - Accounts use a bearer token issued at signup (passwordless MVP). For production,
   swap the token issuance in `POST /api/signup` for emailed magic links.
 
+## Developer API
+
+DynaQR has a REST API so customers can manage codes from their own systems — a common
+reason teams pay for a higher tier. Auth uses a Bearer **account token** or a hashed,
+revocable **API key** (`dqr_live_…`, created in the dashboard). Full reference:
+**[API.md](API.md)**.
+
 ## API quick reference
 
 ```
