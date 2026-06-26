@@ -64,6 +64,23 @@ test('gradient fill: PNG recolors dark modules; SVG injects a gradient def', asy
   assert.match(radial, /<radialGradient id="qg"/);
 });
 
+test('custom module/eye styles render valid PNG + SVG (rounded, dots)', async () => {
+  for (const module of ['rounded', 'dot']) {
+    const png = PNG.sync.read(await qrPng('https://example.com/x', { width: 300, module, eye: module }));
+    assert.ok(png.width >= 200, `${module} png renders`);
+    const svg = await qrSvg('https://example.com/x', { width: 300, module, eye: module });
+    assert.match(svg, /<svg[^>]+viewBox="0 0 \d+ \d+"/);
+    if (module === 'dot') assert.match(svg, /<circle/);
+    if (module === 'rounded') assert.match(svg, /rx="0.34"/);
+  }
+  // Combined: gradient + dots + circular logo still produces a valid PNG.
+  const combo = PNG.sync.read(await qrPng('https://example.com/x', {
+    width: 320, module: 'dot', eye: 'dot', gradient: { from: '#7c8cff', to: '#22e0d0', type: 'linear', angle: 45 },
+    logo: logoDataUrl(), logoShape: 'circle',
+  }));
+  assert.equal(combo.width >= 200, true);
+});
+
 test('qrSvg injects an <image> overlay only when a logo is provided', async () => {
   const plain = await qrSvg('https://example.com/x', { width: 300 });
   assert.ok(!plain.includes('<image'));

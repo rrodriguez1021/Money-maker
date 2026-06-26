@@ -488,12 +488,16 @@ async function refreshPreview() {
   } catch { /* ignore */ }
 }
 function currentStyle() {
-  if (!document.getElementById('gradOn')?.checked) return null;
-  return { gradient: { from: $('#gradFrom').value, to: $('#gradTo').value, type: $('#gradType').value, angle: 45 } };
+  const style = {};
+  if (document.getElementById('gradOn')?.checked) style.gradient = { from: $('#gradFrom').value, to: $('#gradTo').value, type: $('#gradType').value, angle: 45 };
+  const mod = $('#modStyle')?.value, eye = $('#eyeStyle')?.value;
+  if (mod && mod !== 'square') style.module = mod;
+  if (eye && eye !== 'square') style.eye = eye;
+  return Object.keys(style).length ? style : null;
 }
 function queuePreview() { clearTimeout(previewDeb); previewDeb = setTimeout(refreshPreview, 180); }
 ['#colorDark', '#colorBg', '#target', '#gradFrom', '#gradTo'].forEach((s) => document.querySelector(s)?.addEventListener('input', queuePreview));
-['#logoShape', '#gradType', '#gradOn'].forEach((s) => document.querySelector(s)?.addEventListener('change', refreshPreview));
+['#logoShape', '#gradType', '#gradOn', '#modStyle', '#eyeStyle'].forEach((s) => document.querySelector(s)?.addEventListener('change', refreshPreview));
 document.getElementById('logoInput')?.addEventListener('change', async () => { previewLogo = await readLogoFile(); refreshPreview(); });
 
 // Read the selected logo PNG as a data URL (or null if none / too big).

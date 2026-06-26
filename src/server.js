@@ -321,7 +321,14 @@ app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
     opts.color = { dark: link.color_dark || '#000000', light: link.color_bg || '#ffffff' };
   }
   if (branding && link.logo) { opts.logo = link.logo; opts.logoShape = link.logo_shape || 'square'; }
-  if (branding && link.qr_style) { try { const st = JSON.parse(link.qr_style); if (st.gradient) opts.gradient = st.gradient; } catch { /* ignore */ } }
+  if (branding && link.qr_style) {
+    try {
+      const st = JSON.parse(link.qr_style);
+      if (st.gradient) opts.gradient = st.gradient;
+      if (st.module) opts.module = st.module;
+      if (st.eye) opts.eye = st.eye;
+    } catch { /* ignore */ }
+  }
   try {
     if (req.params.fmt === 'svg') {
       res.type('image/svg+xml').send(await qrSvg(url, opts));
@@ -345,7 +352,11 @@ app.post('/api/qr/preview', auth, async (req, res) => {
     opts.logoShape = req.body.logoShape === 'circle' ? 'circle' : 'square';
   }
   const style = qrStyle(req.body, req.account.plan);
-  if (style && style.gradient) opts.gradient = style.gradient;
+  if (style) {
+    if (style.gradient) opts.gradient = style.gradient;
+    if (style.module) opts.module = style.module;
+    if (style.eye) opts.eye = style.eye;
+  }
   try {
     res.type('image/png').send(await qrPng(text, opts));
   } catch {
@@ -468,6 +479,9 @@ function qrStyle(body, plan) {
       angle: Number.isFinite(angle) ? Math.max(0, Math.min(360, angle)) : 45,
     };
   }
+  const shapes = ['rounded', 'dot'];
+  if (shapes.includes(s.module)) out.module = s.module;
+  if (shapes.includes(s.eye)) out.eye = s.eye;
   return Object.keys(out).length ? out : null;
 }
 
