@@ -101,3 +101,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 60px; margin-top: 10px; }
 .bar { flex: 1; background: linear-gradient(var(--accent), var(--accent2)); border-radius: 3px 3px 0 0; min-height: 2px; }
 .hidden { display: none !important; }
+.breakdowns { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-top: 16px; }
+.bd-h { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 6px; }
+.bd-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.bd-row span:last-child { color: var(--accent); font-weight: 600; }

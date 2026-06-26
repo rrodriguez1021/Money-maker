@@ -210,12 +210,21 @@ async function showStats(l, el) {
     const bars = s.daily.map((d) => `<div class="bar" style="height:${(d.scans / max) * 100}%" title="${d.date}: ${d.scans}"></div>`).join('');
     let box = el.nextElementSibling;
     if (box && box.classList.contains('stats-box')) { box.remove(); return; }
+    const breakdown = (title, items) => items && items.length
+      ? `<div class="bd"><div class="bd-h">${title}</div>${items.slice(0, 5).map((i) =>
+          `<div class="bd-row"><span>${escapeHtml(i.name)}</span><span>${i.scans}</span></div>`).join('')}</div>`
+      : '';
     box = document.createElement('div');
     box.className = 'panel stats-box';
     box.innerHTML = `<strong>${s.total} total scans</strong> · last 30 days
       <a class="btn btn-sm" style="float:right" target="_blank"
          href="/api/links/${l.id}/stats.csv?token=${encodeURIComponent(token)}">Export scans CSV</a>
-      <div class="bars">${bars || '<span class="muted">no scans yet</span>'}</div>`;
+      <div class="bars">${bars || '<span class="muted">no scans yet</span>'}</div>
+      <div class="breakdowns">
+        ${breakdown('Devices', s.devices)}
+        ${breakdown('Browsers', s.browsers)}
+        ${breakdown('Top referrers', s.referrers)}
+      </div>`;
     el.after(box);
   } catch (e) {
     if (e.status === 402) toast('Analytics is a Pro feature — upgrade to unlock.', true);

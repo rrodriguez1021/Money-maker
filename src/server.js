@@ -21,6 +21,7 @@ import {
   billingEnabled, businessBillingEnabled, annualBillingEnabled, createCheckoutSession,
   constructEvent, customerIdFromEvent, planForSubscription,
 } from './billing.js';
+import { summarizeScans } from './insights.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -217,6 +218,7 @@ app.get('/api/links/:id/stats', auth, (req, res) => {
     total: countScans(link.id),
     daily: dailyScans(link.id, since).map((d) => ({ date: new Date(d.day * 86400000).toISOString().slice(0, 10), scans: d.n })),
     recent: recentScans(link.id, 25).map((s) => ({ ts: s.ts, referrer: s.referrer, userAgent: s.user_agent })),
+    ...summarizeScans(recentScans(link.id, 1000000)),
   });
 });
 
