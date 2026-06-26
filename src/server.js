@@ -181,7 +181,7 @@ app.post('/api/links', auth, (req, res) => {
   const link = createLink(shortId(), req.account.id, title, target, now(), colorDark, colorBg);
   if (page) setLinkPage(link.id, req.account.id, JSON.stringify(page));
   if (req.body.logo && planLimit(req.account.plan).branding && isValidLogo(req.body.logo)) {
-    setLinkLogo(link.id, req.account.id, req.body.logo);
+    setLinkLogo(link.id, req.account.id, req.body.logo, req.body.logoShape === 'circle' ? 'circle' : 'square');
   }
   res.status(201).json({ ...stripLogo(findLink(link.id)), active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
 });
@@ -237,10 +237,10 @@ app.put('/api/links/:id', auth, (req, res) => {
   // Logo: null clears it; a valid PNG sets it (Business only); invalid is rejected.
   if (req.body.logo !== undefined) {
     if (req.body.logo === null) {
-      setLinkLogo(link.id, req.account.id, null);
+      setLinkLogo(link.id, req.account.id, null, 'square');
     } else if (planLimit(req.account.plan).branding) {
       if (!isValidLogo(req.body.logo)) return res.status(400).json({ error: 'invalid_logo', hint: 'Logo must be a PNG under 300KB.' });
-      setLinkLogo(link.id, req.account.id, req.body.logo);
+      setLinkLogo(link.id, req.account.id, req.body.logo, req.body.logoShape === 'circle' ? 'circle' : 'square');
     }
   }
 
@@ -313,13 +313,31 @@ app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
   if (branding && (link.color_dark || link.color_bg)) {
     opts.color = { dark: link.color_dark || '#000000', light: link.color_bg || '#ffffff' };
   }
-  if (branding && link.logo) opts.logo = link.logo;
+  if (branding && link.logo) { opts.logo = link.logo; opts.logoShape = link.logo_shape || 'square'; }
   try {
     if (req.params.fmt === 'svg') {
       res.type('image/svg+xml').send(await qrSvg(url, opts));
     } else {
       res.type('image/png').send(await qrPng(url, opts));
     }
+  } catch {
+    res.status(500).json({ error: 'qr_failed' });
+  }
+});
+
+// --- Live QR preview (no link saved). Reflects the caller's plan gating. ---
+app.post('/api/qr/preview', auth, async (req, res) => {
+  const branding = planLimit(req.account.plan).branding;
+  const text = String(req.body.text || '').slice(0, 280) || 'https://qrysm.app/preview';
+  const opts = { width: 320 };
+  const { colorDark, colorBg } = brandColors(req.body, req.account.plan);
+  if (colorDark || colorBg) opts.color = { dark: colorDark || '#000000', light: colorBg || '#ffffff' };
+  if (branding && req.body.logo && isValidLogo(req.body.logo)) {
+    opts.logo = req.body.logo;
+    opts.logoShape = req.body.logoShape === 'circle' ? 'circle' : 'square';
+  }
+  try {
+    res.type('image/png').send(await qrPng(text, opts));
   } catch {
     res.status(500).json({ error: 'qr_failed' });
   }

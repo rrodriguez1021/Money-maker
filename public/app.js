@@ -68,6 +68,7 @@ async function boot() {
 
   // Show brand color pickers only when the plan includes branding.
   $('#brandRow').classList.toggle('hidden', !me.limits.branding);
+  if (me.limits.branding) refreshPreview();
 
   // Upgrade buttons: offer Pro if on Free, and Business unless already on Business.
   const upBtn = $('#upgradeBtn');
@@ -138,6 +139,7 @@ $('#createBtn').onclick = async () => {
   if (me && me.limits.branding) {
     body.colorDark = $('#colorDark').value;
     body.colorBg = $('#colorBg').value;
+    body.logoShape = $('#logoShape')?.value || 'square';
     const logo = await readLogoFile();
     if (logo) body.logo = logo;
   }
@@ -460,6 +462,33 @@ document.addEventListener('click', (e) => {
       .catch(() => toast('Could not delete account', true));
   }
 });
+
+// Live branded-QR preview (Business): re-renders as colors/logo/shape change.
+let previewLogo = null, previewDeb;
+async function refreshPreview() {
+  if (!me || !me.limits.branding) return;
+  const body = {
+    text: $('#target').value.trim() || 'https://qrysm.app/preview',
+    colorDark: $('#colorDark').value, colorBg: $('#colorBg').value,
+    logoShape: $('#logoShape')?.value || 'square',
+  };
+  if (previewLogo) body.logo = previewLogo;
+  try {
+    const res = await fetch('/api/qr/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const img = $('#qrPreview'); if (!img) return;
+    if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+    const u = URL.createObjectURL(blob); img.src = u; img.dataset.url = u;
+  } catch { /* ignore */ }
+}
+function queuePreview() { clearTimeout(previewDeb); previewDeb = setTimeout(refreshPreview, 180); }
+['#colorDark', '#colorBg', '#target'].forEach((s) => document.querySelector(s)?.addEventListener('input', queuePreview));
+document.getElementById('logoShape')?.addEventListener('change', refreshPreview);
+document.getElementById('logoInput')?.addEventListener('change', async () => { previewLogo = await readLogoFile(); refreshPreview(); });
 
 // Read the selected logo PNG as a data URL (or null if none / too big).
 function readLogoFile() {

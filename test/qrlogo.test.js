@@ -36,6 +36,14 @@ test('qrPng without a logo returns a valid PNG; with a logo it still decodes', a
   assert.ok(decoded.data[c] > 200 && decoded.data[c + 1] < 60, 'center is the logo color');
 });
 
+test('circular logo renders (PNG decodes) and SVG uses a circular clip + ring', async () => {
+  const png = await qrPng('https://example.com/x', { width: 320, logo: logoDataUrl(), logoShape: 'circle' });
+  assert.equal(PNG.sync.read(png).width, 320);
+  const svg = await qrSvg('https://example.com/x', { width: 320, logo: logoDataUrl(), logoShape: 'circle', color: { dark: '#112233', light: '#ffffff' } });
+  assert.match(svg, /<clipPath/);
+  assert.match(svg, /<circle[^>]+stroke="#112233"/);
+});
+
 test('qrSvg injects an <image> overlay only when a logo is provided', async () => {
   const plain = await qrSvg('https://example.com/x', { width: 300 });
   assert.ok(!plain.includes('<image'));

@@ -74,6 +74,8 @@ ensureColumn('links', 'color_bg', 'TEXT');
 ensureColumn('links', 'page_json', 'TEXT');
 // Center logo for branded QR codes (Business tier), stored as a PNG data URL.
 ensureColumn('links', 'logo', 'TEXT');
+// Logo knockout shape: 'square' (default) or 'circle'.
+ensureColumn('links', 'logo_shape', 'TEXT');
 
 // Plan limits — the core monetization lever. Adding the Business tier (branded
 // QR colors) lifts revenue per customer: $9 Pro → $29 Business.
@@ -144,9 +146,9 @@ export const deleteLink = (id, accountId) => deleteLinkStmt.run(id, accountId);
 const setPageStmt = db.prepare(`UPDATE links SET page_json = ? WHERE id = ? AND account_id = ?`);
 export const setLinkPage = (id, accountId, pageJson) => setPageStmt.run(pageJson, id, accountId);
 
-// Set/clear the center logo for a link (PNG data URL or null).
-const setLogoStmt = db.prepare(`UPDATE links SET logo = ? WHERE id = ? AND account_id = ?`);
-export const setLinkLogo = (id, accountId, logo) => setLogoStmt.run(logo, id, accountId);
+// Set/clear the center logo (PNG data URL or null) and its knockout shape.
+const setLogoStmt = db.prepare(`UPDATE links SET logo = ?, logo_shape = ? WHERE id = ? AND account_id = ?`);
+export const setLinkLogo = (id, accountId, logo, shape = 'square') => setLogoStmt.run(logo, shape, id, accountId);
 
 // --- API keys (programmatic access). Only the sha256 hash is stored. ---
 const insertApiKey = db.prepare(

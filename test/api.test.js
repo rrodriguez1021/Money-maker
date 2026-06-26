@@ -410,6 +410,34 @@ test('referrals: signup attribution, count, and page footer carries the code', a
   assert.match(html, new RegExp(`ref=${info.code}`));
 });
 
+test('QR preview endpoint renders PNG and gates branding to plan', async () => {
+  // Free plan: preview works but ignores logo/colors (still a valid PNG).
+  const free = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'prev@example.com' }),
+  }).then(j);
+  const FH = { 'Content-Type': 'application/json', Authorization: `Bearer ${free.token}` };
+  const r1 = await fetch(`${base}/api/qr/preview`, { method: 'POST', headers: FH, body: JSON.stringify({ text: 'https://x.com', logo: logoDataUrl(), logoShape: 'circle' }) });
+  assert.equal(r1.headers.get('content-type'), 'image/png');
+  assert.ok(Number(r1.headers.get('content-length')) > 100);
+
+  // Business plan: preview with circular logo also renders.
+  const biz = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'prevbiz@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(biz.token).id, 'business');
+  const BH = { 'Content-Type': 'application/json', Authorization: `Bearer ${biz.token}` };
+  const r2 = await fetch(`${base}/api/qr/preview`, { method: 'POST', headers: BH, body: JSON.stringify({ text: 'https://x.com', colorDark: '#112233', colorBg: '#ffeedd', logo: logoDataUrl(), logoShape: 'circle' }) });
+  assert.equal(r2.headers.get('content-type'), 'image/png');
+
+  // The saved link persists the chosen logo shape and renders.
+  const link = await fetch(`${base}/api/links`, { method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/circ', logo: logoDataUrl(), logoShape: 'circle' }) }).then(j);
+  assert.equal(link.logo_shape, 'circle');
+  const qr = await fetch(`${base}/api/links/${link.id}/qr.png?token=${biz.token}`);
+  assert.equal(qr.headers.get('content-type'), 'image/png');
+});
+
 test('account deletion erases account, links and scans (GDPR)', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

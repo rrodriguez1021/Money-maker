@@ -306,3 +306,8 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
 .link-item:hover .qr-sheen { opacity: 1; }
 .link-item:hover .link-qr { box-shadow: 0 16px 34px -16px var(--accent), 0 0 0 2px rgba(124,140,255,0.35); }
 @media (prefers-reduced-motion: reduce) { .radar-sweep { animation: none; } }
+
+/* Branded-QR live preview */
+.qr-preview { display: flex; flex-direction: column; gap: 6px; }
+.qr-preview img { width: 92px; height: 92px; border-radius: 10px; background: #fff; padding: 5px;
+  box-shadow: 0 10px 26px -16px #000; }

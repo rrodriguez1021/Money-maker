@@ -45,7 +45,22 @@ export function qrMatrix(text, ecc = 'M') {
   return { size: qr.modules.size, data: Array.from(qr.modules.data) };
 }
 
-export async function qrPng(text, { width = 512, color, logo } = {}) {
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return [11, 13, 23];
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+// Is (x,y) inside a rounded rectangle [rx,ry,w,h] with corner radius r?
+function inRoundedRect(x, y, rx, ry, w, h, r) {
+  const x0 = rx + r, x1 = rx + w - r, y0 = ry + r, y1 = ry + h - r;
+  if (x >= x0 && x <= x1) return y >= ry && y <= ry + h;
+  if (y >= y0 && y <= y1) return x >= rx && x <= rx + w;
+  const cxp = x < x0 ? x0 : x1, cyp = y < y0 ? y0 : y1;
+  return (x - cxp) ** 2 + (y - cyp) ** 2 <= r * r;
+}
+
+export async function qrPng(text, { width = 512, color, logo, logoShape = 'square' } = {}) {
   const ecc = logo ? 'H' : 'M';
   const buf = await QRCode.toBuffer(text, { width, margin: 1, errorCorrectionLevel: ecc, color });
   const decoded = logo && decodeLogo(logo);
@@ -55,17 +70,31 @@ export async function qrPng(text, { width = 512, color, logo } = {}) {
   const pad = Math.round(size * 0.16);
   const box = size + pad * 2;
   const off = (width - box) >> 1;
-  // White rounded-ish backing (square is fine for scannability).
+  const circle = logoShape === 'circle';
+  const cx = off + box / 2, cy = off + box / 2, R = box / 2;
+  const corner = Math.round(box * 0.2);
+  const ring = hexToRgb((color && color.dark) || '#0b0d17');
+  const ringW = Math.max(2, box * 0.045);
+  const setPx = (x, y, r, g, b) => { const i = (width * y + x) << 2; base.data[i] = r; base.data[i + 1] = g; base.data[i + 2] = b; base.data[i + 3] = 255; };
+  // Knockout + ring.
   for (let y = off; y < off + box; y++) {
     for (let x = off; x < off + box; x++) {
-      const i = (width * y + x) << 2;
-      base.data[i] = 255; base.data[i + 1] = 255; base.data[i + 2] = 255; base.data[i + 3] = 255;
+      if (circle) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d > R) continue;
+        if (d > R - ringW) setPx(x, y, ring[0], ring[1], ring[2]); else setPx(x, y, 255, 255, 255);
+      } else {
+        if (!inRoundedRect(x, y, off, off, box, box, corner)) continue;
+        setPx(x, y, 255, 255, 255);
+      }
     }
   }
+  // Composite logo (circle-masked when round).
   const small = scale(decoded, size, size);
-  const lo = off + pad;
+  const lo = off + pad, lcx = size / 2, lcy = size / 2, lR = size / 2;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
+      if (circle && (x - lcx) ** 2 + (y - lcy) ** 2 > lR * lR) continue;
       const si = (size * y + x) << 2;
       const a = small.data[si + 3] / 255;
       if (a === 0) continue;
@@ -79,7 +108,7 @@ export async function qrPng(text, { width = 512, color, logo } = {}) {
   return PNG.sync.write(base);
 }
 
-export async function qrSvg(text, { width = 512, color, logo } = {}) {
+export async function qrSvg(text, { width = 512, color, logo, logoShape = 'square' } = {}) {
   const ecc = logo ? 'H' : 'M';
   const svg = await QRCode.toString(text, { type: 'svg', width, margin: 1, errorCorrectionLevel: ecc, color });
   if (!logo || !DATA_PNG.test(logo)) return svg;
@@ -87,8 +116,20 @@ export async function qrSvg(text, { width = 512, color, logo } = {}) {
   const N = vb ? Number(vb[1]) : width;       // QR coordinate system is in module units
   const size = N * 0.22, pad = size * 0.16, box = size + pad * 2;
   const off = (N - box) / 2, lo = off + pad;
-  const overlay =
-    `<rect x="${off.toFixed(2)}" y="${off.toFixed(2)}" width="${box.toFixed(2)}" height="${box.toFixed(2)}" rx="${(box * 0.14).toFixed(2)}" fill="#ffffff"/>` +
-    `<image x="${lo.toFixed(2)}" y="${lo.toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}" preserveAspectRatio="xMidYMid meet" href="${logo}"/>`;
+  const ring = (color && color.dark) || '#0b0d17';
+  let overlay;
+  if (logoShape === 'circle') {
+    const cx = off + box / 2, cy = off + box / 2, r = box / 2, lr = size / 2;
+    const id = `qc${Math.round(off * 100)}`;
+    overlay =
+      `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="#ffffff"/>` +
+      `<defs><clipPath id="${id}"><circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${lr.toFixed(2)}"/></clipPath></defs>` +
+      `<image x="${lo.toFixed(2)}" y="${lo.toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}" clip-path="url(#${id})" preserveAspectRatio="xMidYMid slice" href="${logo}"/>` +
+      `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="none" stroke="${ring}" stroke-width="${(box * 0.045).toFixed(2)}"/>`;
+  } else {
+    overlay =
+      `<rect x="${off.toFixed(2)}" y="${off.toFixed(2)}" width="${box.toFixed(2)}" height="${box.toFixed(2)}" rx="${(box * 0.2).toFixed(2)}" fill="#ffffff"/>` +
+      `<image x="${lo.toFixed(2)}" y="${lo.toFixed(2)}" width="${size.toFixed(2)}" height="${size.toFixed(2)}" preserveAspectRatio="xMidYMid meet" href="${logo}"/>`;
+  }
   return svg.replace('</svg>', overlay + '</svg>');
 }
