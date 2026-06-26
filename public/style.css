@@ -67,6 +67,7 @@ a:hover { color: #a6b2ff; text-decoration: none; }
 }
 .btn-primary:hover { filter: brightness(1.07); box-shadow: 0 14px 36px -12px rgba(124, 140, 255, 0.8); }
 .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn.busy { opacity: .7; cursor: progress; }
 
 main { max-width: 1140px; margin: 0 auto; padding: 0 28px; }
 .hero { text-align: center; padding: 86px 0 54px; }

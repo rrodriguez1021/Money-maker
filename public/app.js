@@ -11,6 +11,15 @@ function toast(msg, isErr = false) {
   setTimeout(() => (t.className = 'toast'), 2600);
 }
 
+// Run an async action with a busy/disabled state on its trigger button.
+async function withBusy(el, fn) {
+  if (!el) return fn();
+  const label = el.textContent;
+  el.disabled = true; el.classList.add('busy'); el.textContent = '…';
+  try { return await fn(); }
+  finally { el.disabled = false; el.classList.remove('busy'); el.textContent = label; }
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     ...opts,
@@ -80,14 +89,14 @@ async function boot() {
   bizBtn.classList.toggle('hidden', !showBiz);
   // The annual/monthly toggle is only useful when an upgrade is offered and annual is configured.
   $('#period').classList.toggle('hidden', !(showPro || showBiz) || !me.annualBillingEnabled);
-  upBtn.onclick = () => upgrade('pro');
-  bizBtn.onclick = () => upgrade('business');
+  upBtn.onclick = (e) => withBusy(e.currentTarget, () => upgrade('pro'));
+  bizBtn.onclick = (e) => withBusy(e.currentTarget, () => upgrade('business'));
 
   // Paid users get a "Manage billing" link to the Stripe customer portal.
   const manageBtn = $('#manageBtn');
   if (manageBtn) {
     manageBtn.classList.toggle('hidden', !(me.plan !== 'free' && me.billingEnabled));
-    manageBtn.onclick = manageBilling;
+    manageBtn.onclick = (e) => withBusy(e.currentTarget, manageBilling);
   }
 
   await loadLinks();
@@ -148,7 +157,7 @@ async function upgrade(plan) {
 }
 
 // --- Links ---
-$('#createBtn').onclick = async () => {
+$('#createBtn').onclick = (e) => withBusy(e.currentTarget, async () => {
   const target = $('#target').value.trim();
   const title = $('#title').value.trim();
   if (!target) return toast('Enter a destination URL', true);
@@ -167,11 +176,13 @@ $('#createBtn').onclick = async () => {
     toast('QR code created ✓');
     me = await api('/api/me');
     await boot();
-  } catch (e) {
-    if (e.data?.error === 'limit_reached') toast('Free limit reached — upgrade to Pro for unlimited.', true);
-    else toast('Could not create: ' + (e.data?.error || 'error'), true);
+  } catch (err) {
+    if (err.data?.error === 'limit_reached') toast('Free limit reached — upgrade to Pro for unlimited.', true);
+    else toast('Could not create: ' + (err.data?.error || 'error'), true);
   }
-};
+});
+// Enter in the URL or title field creates the code.
+['#target', '#title'].forEach((s) => $(s)?.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#createBtn').click(); }));
 
 // Create a hosted-page QR (no destination website needed).
 $('#pageCreateBtn').onclick = async () => {
@@ -186,17 +197,19 @@ $('#pageCreateBtn').onclick = async () => {
   const page = { headline, subtitle, buttons };
   const av = $('#pageAvatar')?.value.trim(); if (av) page.avatar = av;
   if (me?.limits.branding) page.accent = $('#pageAccent')?.value;
-  try {
-    await api('/api/links', { method: 'POST', body: JSON.stringify({ title, page }) });
-    $('#pageHeadline').value = ''; $('#pageSubtitle').value = '';
-    document.querySelectorAll('#pageButtons input').forEach((i) => (i.value = ''));
-    toast('Hosted page QR created ✓');
-    me = await api('/api/me');
-    await boot();
-  } catch (e) {
-    if (e.data?.error === 'limit_reached') toast('Free limit reached — upgrade to Pro.', true);
-    else toast('Could not create page: ' + (e.data?.error || 'error'), true);
-  }
+  await withBusy($('#pageCreateBtn'), async () => {
+    try {
+      await api('/api/links', { method: 'POST', body: JSON.stringify({ title, page }) });
+      $('#pageHeadline').value = ''; $('#pageSubtitle').value = '';
+      document.querySelectorAll('#pageButtons input').forEach((i) => (i.value = ''));
+      toast('Hosted page QR created ✓');
+      me = await api('/api/me');
+      await boot();
+    } catch (e) {
+      if (e.data?.error === 'limit_reached') toast('Free limit reached — upgrade to Pro.', true);
+      else toast('Could not create page: ' + (e.data?.error || 'error'), true);
+    }
+  });
 };
 
 // ===== ⌘K command palette =====
@@ -570,5 +583,12 @@ function readLogoFile() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+// Esc closes any open inline editor (stats / page editor) when the palette isn't open.
+addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !cmdk.open) {
+    document.querySelectorAll('.stats-box, .pageedit-box').forEach((b) => b.remove());
+  }
+});
 
 boot();
