@@ -186,6 +186,39 @@ test('hosted page link renders HTML instead of redirecting, and logs the scan', 
   assert.equal(links[0].scans, 1);
 });
 
+test('hosted page can be edited and converted back to a redirect', async () => {
+  const { token } = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'pageedit@example.com' }),
+  }).then(j);
+  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: H, body: JSON.stringify({ page: { headline: 'V1', buttons: [{ label: 'A', url: 'example.com/a' }] } }),
+  }).then(j);
+
+  // Edit the page content.
+  await fetch(`${base}/api/links/${link.id}`, {
+    method: 'PUT', headers: H, body: JSON.stringify({ page: { headline: 'V2', subtitle: 'updated', buttons: [{ label: 'B', url: 'example.com/b' }] } }),
+  }).then(j);
+  let html = await fetch(`${base}/r/${link.id}`).then((r) => r.text());
+  assert.match(html, /V2/);
+  assert.match(html, /example\.com\/b/);
+  assert.doesNotMatch(html, /V1/);
+
+  // Convert it back to a plain redirect.
+  await fetch(`${base}/api/links/${link.id}`, {
+    method: 'PUT', headers: H, body: JSON.stringify({ page: null, target: 'example.com/final' }),
+  }).then(j);
+  const red = await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
+  assert.equal(red.status, 302);
+  assert.equal(red.headers.get('location'), 'https://example.com/final');
+
+  // Editing only the title of a redirect link leaves its target intact.
+  await fetch(`${base}/api/links/${link.id}`, { method: 'PUT', headers: H, body: JSON.stringify({ title: 'renamed' }) }).then(j);
+  const still = await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
+  assert.equal(still.headers.get('location'), 'https://example.com/final');
+});
+
 test('bulk create respects plan cap and reports per-row results', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

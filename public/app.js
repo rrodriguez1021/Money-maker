@@ -184,7 +184,7 @@ async function loadLinks() {
       ? `<div class="small">📄 Hosted landing page · <a href="${l.shortUrl}" target="_blank">open</a></div>`
       : `<div class="small">now points to: ${escapeHtml(l.target)}</div>`;
     const editAction = isPage
-      ? `<a class="btn btn-sm" href="${l.shortUrl}" target="_blank">Open page</a>`
+      ? `<button class="btn btn-sm" data-act="editpage">Edit page</button><a class="btn btn-sm" href="${l.shortUrl}" target="_blank">Open</a>`
       : `<button class="btn btn-sm" data-act="edit">Edit dest</button>`;
     const el = document.createElement('div');
     el.className = 'link-item';
@@ -208,10 +208,51 @@ async function loadLinks() {
       </div>`;
     const editBtn = el.querySelector('[data-act=edit]');
     if (editBtn) editBtn.onclick = () => editDest(l);
+    const editPageBtn = el.querySelector('[data-act=editpage]');
+    if (editPageBtn) editPageBtn.onclick = () => editPage(l, el);
     el.querySelector('[data-act=del]').onclick = () => delLink(l);
     el.querySelector('[data-act=stats]').onclick = () => showStats(l, el);
     wrap.appendChild(el);
   }
+}
+
+// Inline editor for a hosted page's content (headline, subtitle, buttons).
+function editPage(l, el) {
+  let box = el.nextElementSibling;
+  if (box && box.classList.contains('pageedit-box')) { box.remove(); return; }
+  const page = JSON.parse(l.page_json || '{}');
+  const buttons = page.buttons || [];
+  let rowsHtml = '';
+  for (let i = 0; i < 6; i++) {
+    const b = buttons[i] || { label: '', url: '' };
+    rowsHtml += `<div class="row" style="margin-bottom:6px">
+      <input class="pe-label" placeholder="Button label" value="${escapeHtml(b.label)}" />
+      <input class="pe-url" placeholder="https://… or tel:…" value="${escapeHtml(b.url)}" /></div>`;
+  }
+  box = document.createElement('div');
+  box.className = 'panel pageedit-box';
+  box.innerHTML = `
+    <label>Headline</label><input class="pe-headline" value="${escapeHtml(page.headline || '')}" />
+    <label style="margin-top:8px">Subtitle</label><input class="pe-subtitle" value="${escapeHtml(page.subtitle || '')}" />
+    <label style="margin-top:8px">Buttons</label>${rowsHtml}
+    <button class="btn btn-primary pe-save" style="margin-top:8px">Save page</button>`;
+  el.after(box);
+  box.querySelector('.pe-save').onclick = async () => {
+    const headline = box.querySelector('.pe-headline').value.trim();
+    const subtitle = box.querySelector('.pe-subtitle').value.trim();
+    const newButtons = [...box.querySelectorAll('.row')].map((r) => ({
+      label: r.querySelector('.pe-label').value.trim(),
+      url: r.querySelector('.pe-url').value.trim(),
+    })).filter((b) => b.label && b.url);
+    if (!headline && !newButtons.length) return toast('Add a headline or at least one button', true);
+    try {
+      await api('/api/links/' + l.id, { method: 'PUT', body: JSON.stringify({ page: { headline, subtitle, buttons: newButtons } }) });
+      toast('Page updated ✓');
+      await loadLinks();
+    } catch (e) {
+      toast('Update failed: ' + (e.data?.error || 'error'), true);
+    }
+  };
 }
 
 async function editDest(l) {

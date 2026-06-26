@@ -168,8 +168,6 @@ app.post('/api/links/bulk', auth, (req, res) => {
 app.put('/api/links/:id', auth, (req, res) => {
   const link = findLink(req.params.id);
   if (!link || link.account_id !== req.account.id) return res.status(404).json({ error: 'not_found' });
-  const target = req.body.target !== undefined ? normalizeUrl(req.body.target) : link.target;
-  if (!target) return res.status(400).json({ error: 'invalid_target' });
   const title = req.body.title !== undefined ? String(req.body.title).slice(0, 120) : link.title;
   const active = req.body.active !== undefined ? !!req.body.active : !!link.active;
   // Preserve existing colors unless the request supplies new ones (and plan allows it).
@@ -177,7 +175,23 @@ app.put('/api/links/:id', auth, (req, res) => {
   const { colorDark, colorBg } = hasColorFields
     ? brandColors(req.body, req.account.plan)
     : { colorDark: link.color_dark, colorBg: link.color_bg };
+
+  // Resolve target + page together: a link is a hosted page or a redirect, not both.
+  let target = link.target;
+  let pageJson = link.page_json;
+  if (req.body.page !== undefined && req.body.page !== null) {
+    const page = sanitizePage(req.body.page, planLimit(req.account.plan).branding);
+    if (!page) return res.status(400).json({ error: 'invalid_page', hint: 'Add a headline or at least one button.' });
+    target = '#page'; pageJson = JSON.stringify(page);
+  } else if (req.body.page === null || req.body.target !== undefined) {
+    // Converting to (or staying) a redirect link — require a valid target URL.
+    const t = normalizeUrl(req.body.target !== undefined ? req.body.target : link.target);
+    if (!t) return res.status(400).json({ error: 'invalid_target' });
+    target = t; pageJson = req.body.page === null ? null : pageJson;
+  }
+
   updateLink(link.id, req.account.id, title, target, active, colorDark, colorBg);
+  if (pageJson !== link.page_json) setLinkPage(link.id, req.account.id, pageJson);
   res.json({ ...findLink(link.id), active });
 });
 
