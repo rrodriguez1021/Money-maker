@@ -23,6 +23,7 @@ The monetization is built in:
 | PNG / SVG export | ✅ | ✅ | ✅ |
 | Scan analytics | — | ✅ | ✅ |
 | Branded QR colors | — | — | ✅ |
+| Center logo in QR | — | — | ✅ |
 
 The free tier drives signups; the code limit + analytics gate drive Pro upgrades; branded
 colors (the #1 upsell in this market) drive Business upgrades and lift revenue per customer.

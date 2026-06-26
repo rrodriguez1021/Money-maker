@@ -15,6 +15,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "nanoid": "^5.0.7",
+    "pngjs": "^7.0.0",
     "qrcode": "^1.5.4",
     "stripe": "^16.2.0"
   },

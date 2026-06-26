@@ -5,6 +5,13 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PNG } from 'pngjs';
+
+function logoDataUrl() {
+  const png = new PNG({ width: 32, height: 32 });
+  for (let i = 0; i < png.data.length; i += 4) { png.data[i] = 0; png.data[i + 1] = 128; png.data[i + 2] = 255; png.data[i + 3] = 255; }
+  return 'data:image/png;base64,' + PNG.sync.write(png).toString('base64');
+}
 
 const dir = mkdtempSync(join(tmpdir(), 'dynaqr-'));
 process.env.DB_PATH = join(dir, 'test.db');
@@ -276,6 +283,47 @@ test('CSV export defuses spreadsheet formula injection', async () => {
   await fetch(`${base}/api/links`, { method: 'POST', headers: H, body: JSON.stringify({ target: 'example.com/y', title: '=SUM(A1:A9)' }) });
   const body = await fetch(`${base}/api/links/export.csv?token=${acct.token}`).then((r) => r.text());
   assert.match(body, /"'=SUM\(A1:A9\)"/, 'leading = is neutralized with a quote');
+});
+
+test('center logo is gated to Business, validated, and never leaked in list', async () => {
+  // Free account: logo is ignored, list never exposes a logo data URL.
+  const free = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'logofree@example.com' }),
+  }).then(j);
+  const FH = { 'Content-Type': 'application/json', Authorization: `Bearer ${free.token}` };
+  const fl = await fetch(`${base}/api/links`, { method: 'POST', headers: FH, body: JSON.stringify({ target: 'example.com/a', logo: logoDataUrl() }) }).then(j);
+  assert.equal(fl.hasLogo, false, 'free plan cannot set a logo');
+  assert.equal(fl.logo, undefined, 'logo data URL never returned');
+
+  // Business account: logo accepted; QR renders; list reports hasLogo but not the data.
+  const biz = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'logobiz@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(biz.token).id, 'business');
+  const BH = { 'Content-Type': 'application/json', Authorization: `Bearer ${biz.token}` };
+  const bl = await fetch(`${base}/api/links`, { method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/b', logo: logoDataUrl() }) }).then(j);
+  assert.equal(bl.hasLogo, true);
+  assert.equal(bl.logo, undefined);
+
+  const png = await fetch(`${base}/api/links/${bl.id}/qr.png?token=${biz.token}`);
+  assert.equal(png.headers.get('content-type'), 'image/png');
+  assert.ok(Number(png.headers.get('content-length')) > 100);
+  const svg = await fetch(`${base}/api/links/${bl.id}/qr.svg?token=${biz.token}`).then((r) => r.text());
+  assert.match(svg, /<image[^>]+href="data:image\/png/);
+
+  const { links } = await fetch(`${base}/api/links?token=${biz.token}`).then(j);
+  assert.ok(links.every((l) => l.logo === undefined), 'list never includes logo bytes');
+
+  // Invalid logo is rejected with 400.
+  const bad = await fetch(`${base}/api/links`, { method: 'POST', headers: BH, body: JSON.stringify({ target: 'example.com/c', logo: 'data:image/png;base64,zzzz' }) });
+  assert.equal(bad.status, 400);
+
+  // Logo can be cleared via PUT with logo:null.
+  await fetch(`${base}/api/links/${bl.id}`, { method: 'PUT', headers: BH, body: JSON.stringify({ logo: null }) }).then(j);
+  const after = await fetch(`${base}/api/links?token=${biz.token}`).then((r) => r.json());
+  assert.equal(after.links.find((l) => l.id === bl.id).hasLogo, false);
 });
 
 test('account deletion erases account, links and scans (GDPR)', async () => {

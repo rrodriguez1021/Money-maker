@@ -108,6 +108,8 @@ $('#createBtn').onclick = async () => {
   if (me && me.limits.branding) {
     body.colorDark = $('#colorDark').value;
     body.colorBg = $('#colorBg').value;
+    const logo = await readLogoFile();
+    if (logo) body.logo = logo;
   }
   try {
     await api('/api/links', { method: 'POST', body: JSON.stringify(body) });
@@ -318,6 +320,20 @@ document.addEventListener('click', (e) => {
       .catch(() => toast('Could not delete account', true));
   }
 });
+
+// Read the selected logo PNG as a data URL (or null if none / too big).
+function readLogoFile() {
+  const input = document.getElementById('logoInput');
+  const file = input && input.files && input.files[0];
+  if (!file) return Promise.resolve(null);
+  if (file.size > 300 * 1024) { toast('Logo must be under 300KB', true); return Promise.resolve(null); }
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve(typeof r.result === 'string' ? r.result : null);
+    r.onerror = () => resolve(null);
+    r.readAsDataURL(file);
+  });
+}
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -56,6 +56,8 @@ ensureColumn('links', 'color_dark', 'TEXT');
 ensureColumn('links', 'color_bg', 'TEXT');
 // Hosted landing page content as JSON. Null = plain redirect link.
 ensureColumn('links', 'page_json', 'TEXT');
+// Center logo for branded QR codes (Business tier), stored as a PNG data URL.
+ensureColumn('links', 'logo', 'TEXT');
 
 // Plan limits — the core monetization lever. Adding the Business tier (branded
 // QR colors) lifts revenue per customer: $9 Pro → $29 Business.
@@ -117,6 +119,10 @@ export const deleteLink = (id, accountId) => deleteLinkStmt.run(id, accountId);
 // Set/clear the hosted-page content for a link (JSON string or null).
 const setPageStmt = db.prepare(`UPDATE links SET page_json = ? WHERE id = ? AND account_id = ?`);
 export const setLinkPage = (id, accountId, pageJson) => setPageStmt.run(pageJson, id, accountId);
+
+// Set/clear the center logo for a link (PNG data URL or null).
+const setLogoStmt = db.prepare(`UPDATE links SET logo = ? WHERE id = ? AND account_id = ?`);
+export const setLinkLogo = (id, accountId, logo) => setLogoStmt.run(logo, id, accountId);
 
 // --- Account deletion (GDPR right to erasure): remove account + its links + scans ---
 const delScansForAccount = db.prepare(

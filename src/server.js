@@ -7,17 +7,17 @@
 
 import express from 'express';
 import { customAlphabet } from 'nanoid';
-import QRCode from 'qrcode';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
   createAccount, findAccountByToken, findAccountByEmail, findAccountById,
   setPlan, setPlanForCustomer, planLimit,
-  createLink, findLink, listLinks, countLinks, updateLink, deleteLink, setLinkPage,
+  createLink, findLink, listLinks, countLinks, updateLink, deleteLink, setLinkPage, setLinkLogo,
   recordScan, countScans, recentScans, dailyScans, deleteAccount,
 } from './db.js';
 import { sanitizePage, renderPage } from './page.js';
+import { qrPng, qrSvg, isValidLogo } from './qrlogo.js';
 import {
   billingEnabled, businessBillingEnabled, annualBillingEnabled, createCheckoutSession,
   constructEvent, customerIdFromEvent, planForSubscription,
@@ -105,7 +105,7 @@ app.get('/api/me', auth, (req, res) => {
 // --- Links CRUD ---
 app.get('/api/links', auth, (req, res) => {
   const links = listLinks(req.account.id).map((l) => ({
-    ...l, active: !!l.active, scans: countScans(l.id), shortUrl: `${baseUrl(req)}/r/${l.id}`,
+    ...stripLogo(l), active: !!l.active, scans: countScans(l.id), shortUrl: `${baseUrl(req)}/r/${l.id}`,
   }));
   res.json({ links });
 });
@@ -137,9 +137,16 @@ app.post('/api/links', auth, (req, res) => {
   }
   const title = String(req.body.title || '').slice(0, 120);
   const { colorDark, colorBg } = brandColors(req.body, req.account.plan);
+  // Validate a center logo up front so we don't create a link then reject the logo.
+  if (req.body.logo != null && planLimit(req.account.plan).branding && !isValidLogo(req.body.logo)) {
+    return res.status(400).json({ error: 'invalid_logo', hint: 'Logo must be a PNG under 300KB.' });
+  }
   const link = createLink(shortId(), req.account.id, title, target, now(), colorDark, colorBg);
   if (page) setLinkPage(link.id, req.account.id, JSON.stringify(page));
-  res.status(201).json({ ...findLink(link.id), active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
+  if (req.body.logo && planLimit(req.account.plan).branding && isValidLogo(req.body.logo)) {
+    setLinkLogo(link.id, req.account.id, req.body.logo);
+  }
+  res.status(201).json({ ...stripLogo(findLink(link.id)), active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
 });
 
 // Bulk create — paste many destinations at once. Respects the plan's link cap and
@@ -190,9 +197,19 @@ app.put('/api/links/:id', auth, (req, res) => {
     target = t; pageJson = req.body.page === null ? null : pageJson;
   }
 
+  // Logo: null clears it; a valid PNG sets it (Business only); invalid is rejected.
+  if (req.body.logo !== undefined) {
+    if (req.body.logo === null) {
+      setLinkLogo(link.id, req.account.id, null);
+    } else if (planLimit(req.account.plan).branding) {
+      if (!isValidLogo(req.body.logo)) return res.status(400).json({ error: 'invalid_logo', hint: 'Logo must be a PNG under 300KB.' });
+      setLinkLogo(link.id, req.account.id, req.body.logo);
+    }
+  }
+
   updateLink(link.id, req.account.id, title, target, active, colorDark, colorBg);
   if (pageJson !== link.page_json) setLinkPage(link.id, req.account.id, pageJson);
-  res.json({ ...findLink(link.id), active });
+  res.json({ ...stripLogo(findLink(link.id)), active });
 });
 
 app.delete('/api/links/:id', auth, (req, res) => {
@@ -213,16 +230,18 @@ app.get('/api/links/:id/qr.:fmt', auth, async (req, res) => {
   const link = findLink(req.params.id);
   if (!link || link.account_id !== req.account.id) return res.status(404).json({ error: 'not_found' });
   const url = `${baseUrl(req)}/r/${link.id}`;
-  const opts = { margin: 1, width: 512, errorCorrectionLevel: 'M' };
-  // Branded colors render only while the account is on a branding-enabled plan.
-  if (planLimit(req.account.plan).branding && (link.color_dark || link.color_bg)) {
+  // Branded colors + center logo render only while the account has branding.
+  const branding = planLimit(req.account.plan).branding;
+  const opts = { width: 512 };
+  if (branding && (link.color_dark || link.color_bg)) {
     opts.color = { dark: link.color_dark || '#000000', light: link.color_bg || '#ffffff' };
   }
+  if (branding && link.logo) opts.logo = link.logo;
   try {
     if (req.params.fmt === 'svg') {
-      res.type('image/svg+xml').send(await QRCode.toString(url, { ...opts, type: 'svg' }));
+      res.type('image/svg+xml').send(await qrSvg(url, opts));
     } else {
-      res.type('image/png').send(await QRCode.toBuffer(url, opts));
+      res.type('image/png').send(await qrPng(url, opts));
     }
   } catch {
     res.status(500).json({ error: 'qr_failed' });
@@ -305,6 +324,12 @@ function toCsv(header, rows) {
     return '"' + s.replace(/"/g, '""') + '"';
   };
   return [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
+}
+
+// Drop the heavy logo data URL from API responses; expose a boolean instead.
+function stripLogo(l) {
+  const { logo, ...rest } = l;
+  return { ...rest, hasLogo: !!logo };
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
