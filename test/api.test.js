@@ -15,6 +15,7 @@ function logoDataUrl() {
 
 const dir = mkdtempSync(join(tmpdir(), 'dynaqr-'));
 process.env.DB_PATH = join(dir, 'test.db');
+process.env.RATE_LIMIT_DISABLED = '1'; // the suite hammers endpoints; don't 429 it
 
 const { app } = await import('../src/server.js');
 const { setPlan, findAccountByToken } = await import('../src/db.js');

@@ -30,10 +30,45 @@ import {
 import { summarizeScans } from './insights.js';
 import { assessScannability } from './scan.js';
 import { sanitizeRules, evalRules } from './routing.js';
+import { createLimiter } from './ratelimit.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const app = express();
+
+// Behind a hosting proxy (Render/Fly/Heroku) so req.ip and req.secure reflect the
+// real client and TLS, not the proxy hop. Enables correct rate-limiting + HSTS.
+app.set('trust proxy', true);
+app.disable('x-powered-by');
+
+// --- Security headers on every response. Conservative CSP that still allows the
+// inline importmap (WebGL hero) and inline hosted-page scripts via 'unsafe-inline'. ---
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
+  res.set('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join('; '));
+  // Only assert HSTS once we're actually on HTTPS (avoids breaking localhost).
+  if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
+// Rate limiters: a strict one for account creation (abuse/spam) and a generous one
+// for the public scan/convert endpoints (a busy code legitimately gets many hits).
+const signupLimiter = createLimiter({ windowMs: 60000, max: 20 });
+const publicLimiter = createLimiter({ windowMs: 60000, max: 600 });
 
 // URL-safe, unambiguous short codes (no look-alike chars).
 const shortId = customAlphabet('346789ABCDEFGHJKLMNPQRTUVWXYabcdefghijkmnpqrtwxyz', 7);
@@ -87,8 +122,9 @@ app.post('/webhook/stripe', express.raw({ type: 'application/json' }), (req, res
   res.json({ received: true });
 });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// 1MB cap: well above a 300KB logo data URL, but stops oversized-payload abuse.
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 // --- Auth: lightweight token-based accounts. POST an email, get a token.
 // For an MVP this is passwordless-by-token; swap in magic-link email in prod. ---
@@ -111,7 +147,7 @@ function auth(req, res, next) {
   next();
 }
 
-app.post('/api/signup', (req, res) => {
+app.post('/api/signup', signupLimiter, (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'invalid_email' });
   const existing = findAccountByEmail(email);
@@ -511,7 +547,7 @@ app.get('/r/:id/b/:idx', (req, res) => {
 });
 
 // --- The public redirect: this is what a QR scan hits. Logs the scan, redirects. ---
-app.get('/r/:id', (req, res) => {
+app.get('/r/:id', publicLimiter, (req, res) => {
   const link = findLink(req.params.id);
   if (!link || !link.active) return res.status(404).sendFile(join(__dirname, '..', 'public', '404.html'));
   const ts = now();
@@ -556,14 +592,14 @@ function sendPixel(res) {
   res.end(PIXEL_GIF);
 }
 // Conversion beacon — fired from the customer's success page (pixel.js or an <img>).
-app.get('/api/convert', (req, res) => {
+app.get('/api/convert', publicLimiter, (req, res) => {
   const ref = String(req.query.ref || '').slice(0, 16);
   const link = findLink(ref);
   if (link) recordConversion(link.id, String(req.query.v || '').slice(0, 24) || null, now());
   sendPixel(res);
 });
 // No-JS image-pixel alias: <img src="https://host/c/LINKID">
-app.get('/c/:id', (req, res) => {
+app.get('/c/:id', publicLimiter, (req, res) => {
   const link = findLink(req.params.id);
   if (link) recordConversion(link.id, String(req.query.v || '').slice(0, 24) || null, now());
   sendPixel(res);
