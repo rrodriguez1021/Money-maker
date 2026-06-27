@@ -59,10 +59,18 @@ db.exec(`
     ts          INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS conversions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id     TEXT NOT NULL,
+    variant     TEXT,
+    ts          INTEGER NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_links_account ON links(account_id);
   CREATE INDEX IF NOT EXISTS idx_scans_link ON scans(link_id);
   CREATE INDEX IF NOT EXISTS idx_api_keys_account ON api_keys(account_id);
   CREATE INDEX IF NOT EXISTS idx_clicks_link ON page_clicks(link_id);
+  CREATE INDEX IF NOT EXISTS idx_conv_link ON conversions(link_id);
 `);
 
 // --- Lightweight migrations: add columns to existing databases idempotently. ---
@@ -88,6 +96,8 @@ ensureColumn('links', 'logo_shape', 'TEXT');
 ensureColumn('links', 'qr_style', 'TEXT');
 // Smart routing rules as JSON (device / A-B split) — Pro tier. Null = plain redirect.
 ensureColumn('links', 'rules', 'TEXT');
+// Conversion tracking on/off for this code (appends an attribution param on redirect).
+ensureColumn('links', 'track', 'INTEGER NOT NULL DEFAULT 0');
 // Which smart-routing branch a scan took (e.g. 'ios', 'V2', 'Lunch'). Null = none.
 ensureColumn('scans', 'variant', 'TEXT');
 
@@ -157,11 +167,13 @@ export const updateLink = (id, accountId, title, target, active, colorDark = nul
 // Delete a link and its scans + page clicks together (no orphaned rows).
 const delScansForLink = db.prepare(`DELETE FROM scans WHERE link_id = ?`);
 const delClicksForLink = db.prepare(`DELETE FROM page_clicks WHERE link_id = ?`);
+const delConvForLink = db.prepare(`DELETE FROM conversions WHERE link_id = ?`);
 export function deleteLink(id, accountId) {
   db.exec('BEGIN');
   try {
     delScansForLink.run(id);
     delClicksForLink.run(id);
+    delConvForLink.run(id);
     deleteLinkStmt.run(id, accountId);
     db.exec('COMMIT');
   } catch (e) {
@@ -212,6 +224,7 @@ const delScansForAccount = db.prepare(
 const delLinksForAccount = db.prepare(`DELETE FROM links WHERE account_id = ?`);
 const delKeysForAccount = db.prepare(`DELETE FROM api_keys WHERE account_id = ?`);
 const delClicksForAccount = db.prepare(`DELETE FROM page_clicks WHERE link_id IN (SELECT id FROM links WHERE account_id = ?)`);
+const delConvForAccount = db.prepare(`DELETE FROM conversions WHERE link_id IN (SELECT id FROM links WHERE account_id = ?)`);
 const delAccountStmt = db.prepare(`DELETE FROM accounts WHERE id = ?`);
 
 export function deleteAccount(accountId) {
@@ -220,6 +233,7 @@ export function deleteAccount(accountId) {
   try {
     delScansForAccount.run(accountId);
     delClicksForAccount.run(accountId);
+    delConvForAccount.run(accountId);
     delLinksForAccount.run(accountId);
     delKeysForAccount.run(accountId);
     delAccountStmt.run(accountId);
@@ -254,6 +268,18 @@ const insertClick = db.prepare(`INSERT INTO page_clicks (link_id, btn, ts) VALUE
 const clicksByBtnStmt = db.prepare(`SELECT btn, COUNT(*) AS n FROM page_clicks WHERE link_id = ? GROUP BY btn`);
 export const recordPageClick = (linkId, btn, ts) => insertClick.run(linkId, btn, ts);
 export const clicksByButton = (linkId) => clicksByBtnStmt.all(linkId);
+
+// --- Conversions (scan → outcome attribution) ---
+const insertConversion = db.prepare(`INSERT INTO conversions (link_id, variant, ts) VALUES (?, ?, ?)`);
+const countConvStmt = db.prepare(`SELECT COUNT(*) AS n FROM conversions WHERE link_id = ?`);
+const convByVariantStmt = db.prepare(`SELECT variant, COUNT(*) AS n FROM conversions WHERE link_id = ? AND variant IS NOT NULL GROUP BY variant ORDER BY n DESC`);
+export const recordConversion = (linkId, variant, ts) => insertConversion.run(linkId, variant || null, ts);
+export const countConversions = (linkId) => countConvStmt.get(linkId).n;
+export const conversionsByVariant = (linkId) => convByVariantStmt.all(linkId);
+
+// Toggle conversion tracking for a code.
+const setTrackStmt = db.prepare(`UPDATE links SET track = ? WHERE id = ? AND account_id = ?`);
+export const setLinkTrack = (id, accountId, on) => setTrackStmt.run(on ? 1 : 0, id, accountId);
 export const countScans = (linkId) => countScansStmt.get(linkId).n;
 const lastScanStmt = db.prepare(`SELECT MAX(ts) AS ts FROM scans WHERE link_id = ?`);
 export const lastScanAt = (linkId) => lastScanStmt.get(linkId).ts;

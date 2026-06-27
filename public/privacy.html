@@ -73,6 +73,15 @@
   the people scanning your codes. Where required, you must provide your own notice to scan
   end-users that scanning is logged.</p>
 
+  <h3>Conversion tracking (optional)</h3>
+  <p>If an account owner enables conversion tracking on a code, the redirect appends an
+  attribution token (<code>qr_ref</code>) to the destination URL, and the owner may install a
+  first-party pixel (<code>pixel.js</code>) on their own site. When a conversion fires, we
+  record a count for that code (and routing variant). This stores an attribution token and a
+  timestamp only — <strong>no cookies, no IP addresses, and no personal data</strong> about the
+  visitor. Account owners are responsible for disclosing conversion tracking in their own site's
+  privacy notice.</p>
+
   <h2 id="use">4. How we use data</h2>
   <ul>
     <li>To operate the redirect and QR features you request;</li>

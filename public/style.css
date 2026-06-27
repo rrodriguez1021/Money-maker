@@ -204,6 +204,10 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
 .bd-h { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 7px; }
 .bd-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .bd-row span:last-child { color: var(--cyan); font-weight: 700; }
+.conv-line { margin: 10px 0 4px; font-size: 15px; color: var(--ink); }
+.conv-line b { color: var(--good); }
+.pixel-code { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; background: rgba(13,16,32,0.7);
+  border: 1px solid var(--line-strong); color: var(--ink); border-radius: 10px; padding: 10px 12px; resize: vertical; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }

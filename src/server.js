@@ -18,6 +18,7 @@ import {
   createApiKey, listApiKeys, findApiKeyByHash, revokeApiKey, touchApiKey,
   findAccountByRefCode, setReferredBy, setRefCode, countReferrals, setLinkStyle,
   recordPageClick, clicksByButton, setLinkRules,
+  recordConversion, countConversions, conversionsByVariant, setLinkTrack,
 } from './db.js';
 import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
@@ -192,6 +193,7 @@ app.post('/api/links', auth, (req, res) => {
   // Smart routing applies to redirect links only (not hosted pages).
   const rules = page ? null : rulesFrom(req.body, req.account.plan);
   if (rules) setLinkRules(link.id, req.account.id, JSON.stringify(rules));
+  if (req.body.track && planLimit(req.account.plan).analytics) setLinkTrack(link.id, req.account.id, true);
   res.status(201).json({ ...stripLogo(findLink(link.id)), active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
 });
 
@@ -260,6 +262,9 @@ app.put('/api/links/:id', auth, (req, res) => {
   if (req.body.rules !== undefined) {
     const rules = rulesFrom(req.body, req.account.plan);
     setLinkRules(link.id, req.account.id, rules ? JSON.stringify(rules) : null);
+  }
+  if (req.body.track !== undefined && planLimit(req.account.plan).analytics) {
+    setLinkTrack(link.id, req.account.id, !!req.body.track);
   }
 
   updateLink(link.id, req.account.id, title, target, active, colorDark, colorBg);
@@ -433,8 +438,14 @@ app.get('/api/links/:id/stats', auth, (req, res) => {
       buttonClicks = buttons.map((b, i) => ({ label: b.label, clicks: counts[i] || 0 }));
     } catch { /* ignore */ }
   }
+  const total = countScans(link.id);
+  const conversions = countConversions(link.id);
   res.json({
-    total: countScans(link.id),
+    total,
+    conversions,
+    conversionRate: total ? Math.round((conversions / total) * 1000) / 10 : 0,
+    conversionsByVariant: conversionsByVariant(link.id).map((v) => ({ name: v.variant, scans: v.n })),
+    track: !!link.track,
     daily: dailyScans(link.id, since).map((d) => ({ date: new Date(d.day * 86400000).toISOString().slice(0, 10), scans: d.n })),
     recent: recentScans(link.id, 25).map((s) => ({ ts: s.ts, referrer: s.referrer, userAgent: s.user_agent })),
     buttonClicks,
@@ -526,7 +537,36 @@ app.get('/r/:id', (req, res) => {
       return res.status(500).send('page error');
     }
   }
+  // Conversion attribution: tag the destination so the owner's pixel can credit this scan.
+  if (link.track) {
+    try {
+      const u = new URL(dest);
+      u.searchParams.set('qr_ref', link.id);
+      if (variant) u.searchParams.set('qr_v', variant);
+      dest = u.toString();
+    } catch { /* non-URL target — leave as-is */ }
+  }
   res.redirect(302, dest);
+});
+
+// 1×1 transparent GIF used by conversion beacons.
+const PIXEL_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+function sendPixel(res) {
+  res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+  res.end(PIXEL_GIF);
+}
+// Conversion beacon — fired from the customer's success page (pixel.js or an <img>).
+app.get('/api/convert', (req, res) => {
+  const ref = String(req.query.ref || '').slice(0, 16);
+  const link = findLink(ref);
+  if (link) recordConversion(link.id, String(req.query.v || '').slice(0, 24) || null, now());
+  sendPixel(res);
+});
+// No-JS image-pixel alias: <img src="https://host/c/LINKID">
+app.get('/c/:id', (req, res) => {
+  const link = findLink(req.params.id);
+  if (link) recordConversion(link.id, String(req.query.v || '').slice(0, 24) || null, now());
+  sendPixel(res);
 });
 
 // Public, unauthenticated QR matrix for the landing "forge" 3D preview (no link created).

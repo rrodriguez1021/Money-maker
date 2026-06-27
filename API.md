@@ -60,7 +60,9 @@ curl -X PUT https://qr.example.com/api/links/abc1234 \
 ```
 GET /api/links/:id/qr.png         PNG (branded colors + center logo on Business)
 GET /api/links/:id/qr.svg         SVG (vector — best for print)
-GET /api/links/:id/stats          { total, daily[], recent[], devices[], browsers[], referrers[] }   # Pro
+GET /api/links/:id/stats          { total, conversions, conversionRate, routing[], daily[], devices[]… }   # Pro
+GET /api/convert?ref=<id>&v=…     conversion beacon (used by pixel.js on the success page)
+GET /c/:id                        no-code image-pixel alias for a conversion
 GET /api/links/:id/stats.csv      scan rows as CSV                                                    # Pro
 ```
 

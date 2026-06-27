@@ -326,6 +326,51 @@ test('smart routing: device + A/B redirects, gated to Pro', async () => {
   assert.equal(byVariant.V2, 1);
 });
 
+test('conversion tracking: redirect tags the URL, pixel records, stats show rate (Pro)', async () => {
+  // Free plan can't enable tracking.
+  const free = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'convfree@example.com' }),
+  }).then(j);
+  const FH = { 'Content-Type': 'application/json', Authorization: `Bearer ${free.token}` };
+  const fl = await fetch(`${base}/api/links`, { method: 'POST', headers: FH, body: JSON.stringify({ target: 'example.com/a', track: true }) }).then(j);
+  assert.equal(fl.track, 0, 'free plan cannot enable tracking');
+
+  // Pro: enable tracking.
+  const pro = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'convpro@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(pro.token).id, 'pro');
+  const PH = { 'Content-Type': 'application/json', Authorization: `Bearer ${pro.token}` };
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: PH,
+    body: JSON.stringify({ target: 'example.com/landing', track: true, rules: { type: 'device', ios: 'apps.apple.com/app', android: 'play.google.com/app' } }),
+  }).then(j);
+  assert.equal(link.track, 1);
+
+  // Two scans → destination carries the attribution token (+ routing variant).
+  const a = await fetch(`${base}/r/${link.id}`, { redirect: 'manual', headers: { 'user-agent': 'iPhone OS 17' } });
+  const loc = a.headers.get('location');
+  assert.match(loc, new RegExp(`qr_ref=${link.id}`));
+  assert.match(loc, /qr_v=ios/);
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual', headers: { 'user-agent': 'Android 14' } });
+
+  // Fire one conversion via the JS-style beacon (with variant) and one via the image pixel.
+  const px = await fetch(`${base}/api/convert?ref=${link.id}&v=ios`);
+  assert.equal(px.headers.get('content-type'), 'image/gif');
+  await fetch(`${base}/c/${link.id}`);
+
+  const stats = await fetch(`${base}/api/links/${link.id}/stats`, { headers: PH }).then(j);
+  assert.equal(stats.conversions, 2);
+  assert.equal(stats.conversionRate, 100); // 2 conversions / 2 scans
+  assert.ok(stats.conversionsByVariant.some((v) => v.name === 'ios'));
+
+  // Beacon for an unknown ref is ignored (still returns a pixel).
+  const bad = await fetch(`${base}/api/convert?ref=nope`);
+  assert.equal(bad.status, 200);
+});
+
 test('smart routing: time/schedule windows route by clock (Pro)', async () => {
   const pro = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

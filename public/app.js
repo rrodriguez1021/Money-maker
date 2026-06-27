@@ -79,6 +79,7 @@ async function boot() {
   $('#brandRow').classList.toggle('hidden', !me.limits.branding);
   document.getElementById('pageAccentWrap')?.classList.toggle('hidden', !me.limits.branding);
   document.getElementById('routingDetails')?.classList.toggle('hidden', !me.limits.analytics);
+  document.getElementById('trackRow')?.classList.toggle('hidden', !me.limits.analytics);
   if (me.limits.branding) refreshPreview();
 
   // Upgrade buttons: offer Pro if on Free, and Business unless already on Business.
@@ -172,6 +173,7 @@ $('#createBtn').onclick = (e) => withBusy(e.currentTarget, async () => {
     if (logo) body.logo = logo;
   }
   const rules = currentRules(); if (rules) body.rules = rules;
+  if (document.getElementById('trackOn')?.checked) body.track = true;
   try {
     await api('/api/links', { method: 'POST', body: JSON.stringify(body) });
     $('#target').value = ''; $('#title').value = '';
@@ -380,7 +382,7 @@ async function loadLinks() {
       <input type="checkbox" class="sel" data-id="${l.id}" title="Select" />
       <div class="qr-wrap"><img class="link-qr" alt="QR" src="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" /><span class="qr-sheen"></span></div>
       <div class="link-main">
-        <h4>${escapeHtml(l.title || '(untitled)')}${l.rules ? ' <span class="pill smart-pill">⚡ smart</span>' : ''}${l.active ? '' : ' <span class="pill paused-pill">paused</span>'}</h4>
+        <h4>${escapeHtml(l.title || '(untitled)')}${l.rules ? ' <span class="pill smart-pill">⚡ smart</span>' : ''}${l.track ? ' <span class="pill smart-pill">🎯 tracking</span>' : ''}${l.active ? '' : ' <span class="pill paused-pill">paused</span>'}</h4>
         <div class="small">QR → <span class="short">${l.shortUrl.replace(/^https?:\/\//, '')}</span></div>
         ${destLine}
       </div>
@@ -396,10 +398,13 @@ async function loadLinks() {
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?token=${encodeURIComponent(token)}" download="qr-${l.id}.svg">SVG</a>
         <a class="btn btn-sm" href="/api/links/${l.id}/qr.svg?frame=scanme&token=${encodeURIComponent(token)}" target="_blank">Poster</a>
         <button class="btn btn-sm" data-act="toggle">${l.active ? 'Pause' : 'Resume'}</button>
+        ${l.track ? '<button class="btn btn-sm" data-act="pixel">Pixel</button>' : ''}
         <button class="btn btn-sm" data-act="dup">Dup</button>
         <button class="btn btn-sm" data-act="stats">Stats</button>
         <button class="btn btn-sm" data-act="del">✕</button>
       </div>`;
+    const pixelBtn = el.querySelector('[data-act=pixel]');
+    if (pixelBtn) pixelBtn.onclick = () => showPixel(l, el);
     el.querySelector('[data-act=toggle]').onclick = (e) => withBusy(e.currentTarget, async () => {
       await api('/api/links/' + l.id, { method: 'PUT', body: JSON.stringify({ active: !l.active }) });
       toast(l.active ? 'Paused — the code now shows a 404' : 'Resumed');
@@ -429,6 +434,27 @@ async function loadLinks() {
     wrap.appendChild(el);
   }
   updateBulkBar();
+}
+
+// Show the install snippet for conversion tracking on a code.
+function showPixel(l, el) {
+  let box = el.nextElementSibling;
+  if (box && box.classList.contains('pixel-box')) { box.remove(); return; }
+  const origin = location.origin;
+  const snippet = `<!-- 1) Add once, site-wide (e.g. in <head>) -->\n<script src="${origin}/pixel.js"></script>\n\n<!-- 2) On your success / thank-you page, after the sale or install -->\n<script>qrysm('conversion')</script>`;
+  const imgPixel = `<img src="${origin}/c/${l.id}" width="1" height="1" alt="" />`;
+  box = document.createElement('div');
+  box.className = 'panel pixel-box';
+  box.innerHTML = `
+    <strong>Conversion tracking — installs/sales for this code</strong>
+    <p class="muted" style="font-size:13px;margin:8px 0">The redirect tags visitors with an attribution token; the snippet credits the conversion back to this exact code (and routing variant). No cookies, no IPs.</p>
+    <label>JS snippet (most accurate — only counts visitors who scanned)</label>
+    <textarea readonly rows="5" class="pixel-code">${escapeHtml(snippet)}</textarea>
+    <label style="margin-top:8px">Or a no-code image pixel (counts every load of your success page)</label>
+    <textarea readonly rows="2" class="pixel-code">${escapeHtml(imgPixel)}</textarea>
+    <button class="btn btn-sm pixel-copy" style="margin-top:8px">Copy JS snippet</button>`;
+  el.after(box);
+  box.querySelector('.pixel-copy').onclick = () => { navigator.clipboard?.writeText(snippet).then(() => toast('Snippet copied ✓')); };
 }
 
 // Inline editor for a hosted page's content (headline, subtitle, buttons).
@@ -556,9 +582,12 @@ async function showStats(l, el) {
       : '';
     box = document.createElement('div');
     box.className = 'panel stats-box';
+    const convLine = (s.track || s.conversions)
+      ? `<div class="conv-line">🎯 <b>${s.conversions}</b> conversions · <b>${s.conversionRate}%</b> rate</div>` : '';
     box.innerHTML = `<strong>${s.total} total scans</strong> · last 30 days
       <a class="btn btn-sm" style="float:right" target="_blank"
          href="/api/links/${l.id}/stats.csv?token=${encodeURIComponent(token)}">Export scans CSV</a>
+      ${convLine}
       <div class="bars">${bars || '<span class="muted">no scans yet</span>'}</div>
       <div class="breakdowns">
         ${breakdown('Devices', s.devices)}
