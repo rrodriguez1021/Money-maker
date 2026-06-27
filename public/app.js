@@ -78,6 +78,7 @@ async function boot() {
   // Show brand color pickers only when the plan includes branding.
   $('#brandRow').classList.toggle('hidden', !me.limits.branding);
   document.getElementById('pageAccentWrap')?.classList.toggle('hidden', !me.limits.branding);
+  document.getElementById('routingDetails')?.classList.toggle('hidden', !me.limits.analytics);
   if (me.limits.branding) refreshPreview();
 
   // Upgrade buttons: offer Pro if on Free, and Business unless already on Business.
@@ -170,6 +171,7 @@ $('#createBtn').onclick = (e) => withBusy(e.currentTarget, async () => {
     const logo = await readLogoFile();
     if (logo) body.logo = logo;
   }
+  const rules = currentRules(); if (rules) body.rules = rules;
   try {
     await api('/api/links', { method: 'POST', body: JSON.stringify(body) });
     $('#target').value = ''; $('#title').value = '';
@@ -378,7 +380,7 @@ async function loadLinks() {
       <input type="checkbox" class="sel" data-id="${l.id}" title="Select" />
       <div class="qr-wrap"><img class="link-qr" alt="QR" src="/api/links/${l.id}/qr.png?token=${encodeURIComponent(token)}" /><span class="qr-sheen"></span></div>
       <div class="link-main">
-        <h4>${escapeHtml(l.title || '(untitled)')}${l.active ? '' : ' <span class="pill paused-pill">paused</span>'}</h4>
+        <h4>${escapeHtml(l.title || '(untitled)')}${l.rules ? ' <span class="pill smart-pill">⚡ smart</span>' : ''}${l.active ? '' : ' <span class="pill paused-pill">paused</span>'}</h4>
         <div class="small">QR → <span class="short">${l.shortUrl.replace(/^https?:\/\//, '')}</span></div>
         ${destLine}
       </div>
@@ -584,6 +586,26 @@ document.addEventListener('click', (e) => {
       })
       .catch(() => toast('Could not delete account', true));
   }
+});
+
+// Smart-routing rules from the create form (Pro). default = the main destination.
+function currentRules() {
+  const mode = document.getElementById('routeMode')?.value;
+  if (mode === 'device') {
+    const ios = $('#routeIos').value.trim(), android = $('#routeAndroid').value.trim();
+    if (!ios && !android) return null;
+    return { type: 'device', ios, android, default: $('#target').value.trim() };
+  }
+  if (mode === 'split') {
+    const urls = $('#routeUrls').value.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (urls.length < 2) return null;
+    return { type: 'split', urls };
+  }
+  return null;
+}
+document.getElementById('routeMode')?.addEventListener('change', (e) => {
+  document.getElementById('routeDevice').classList.toggle('hidden', e.target.value !== 'device');
+  document.getElementById('routeSplit').classList.toggle('hidden', e.target.value !== 'split');
 });
 
 // Live branded-QR preview (Business): re-renders as colors/logo/shape change.

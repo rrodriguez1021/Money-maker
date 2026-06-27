@@ -98,6 +98,29 @@
           style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 14px;font:inherit"></textarea>
         <button id="bulkBtn" class="btn" style="margin-top:8px">Create all</button>
       </details>
+      <details id="routingDetails" class="hidden" style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:14px;color:var(--cyan)">⚡ Smart routing — one code, many destinations <span class="pill pro">Pro</span></summary>
+        <div style="margin-top:10px">
+          <label>Mode</label>
+          <select id="routeMode" style="width:auto">
+            <option value="">Off (single destination)</option>
+            <option value="device">By device · iOS / Android</option>
+            <option value="split">A/B split · rotate URLs</option>
+          </select>
+          <div id="routeDevice" class="hidden" style="margin-top:10px">
+            <div class="row">
+              <div class="field"><label>iPhone / iPad →</label><input id="routeIos" placeholder="apps.apple.com/app/…" /></div>
+              <div class="field"><label>Android →</label><input id="routeAndroid" placeholder="play.google.com/store/…" /></div>
+            </div>
+            <p class="muted" style="font-size:12px;margin:6px 0 0">Everyone else gets the Destination URL above.</p>
+          </div>
+          <div id="routeSplit" class="hidden" style="margin-top:10px">
+            <label>Rotate evenly across these URLs (one per line)</label>
+            <textarea id="routeUrls" rows="3" placeholder="example.com/variant-a&#10;example.com/variant-b"
+              style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 14px;font:inherit"></textarea>
+          </div>
+        </div>
+      </details>
     </div>
 
     <input id="linkFilter" class="hidden" placeholder="Search your codes…" style="margin-bottom:12px" />

@@ -17,7 +17,7 @@ import {
   recordScan, countScans, lastScanAt, recentScans, dailyScans, deleteAccount,
   createApiKey, listApiKeys, findApiKeyByHash, revokeApiKey, touchApiKey,
   findAccountByRefCode, setReferredBy, setRefCode, countReferrals, setLinkStyle,
-  recordPageClick, clicksByButton,
+  recordPageClick, clicksByButton, setLinkRules,
 } from './db.js';
 import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
@@ -28,6 +28,7 @@ import {
 } from './billing.js';
 import { summarizeScans } from './insights.js';
 import { assessScannability } from './scan.js';
+import { sanitizeRules, evalRules } from './routing.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -188,6 +189,9 @@ app.post('/api/links', auth, (req, res) => {
   }
   const style = qrStyle(req.body, req.account.plan);
   if (style) setLinkStyle(link.id, req.account.id, JSON.stringify(style));
+  // Smart routing applies to redirect links only (not hosted pages).
+  const rules = page ? null : rulesFrom(req.body, req.account.plan);
+  if (rules) setLinkRules(link.id, req.account.id, JSON.stringify(rules));
   res.status(201).json({ ...stripLogo(findLink(link.id)), active: !!link.active, shortUrl: `${baseUrl(req)}/r/${link.id}` });
 });
 
@@ -252,6 +256,10 @@ app.put('/api/links/:id', auth, (req, res) => {
   if (req.body.style !== undefined) {
     const style = qrStyle(req.body, req.account.plan);
     setLinkStyle(link.id, req.account.id, style ? JSON.stringify(style) : null);
+  }
+  if (req.body.rules !== undefined) {
+    const rules = rulesFrom(req.body, req.account.plan);
+    setLinkRules(link.id, req.account.id, rules ? JSON.stringify(rules) : null);
   }
 
   updateLink(link.id, req.account.id, title, target, active, colorDark, colorBg);
@@ -509,7 +517,15 @@ app.get('/r/:id', (req, res) => {
       return res.status(500).send('page error');
     }
   }
-  res.redirect(302, link.target);
+  // Smart routing: pick a destination by device or A/B split; else the base target.
+  let dest = link.target;
+  if (link.rules) {
+    try {
+      const chosen = evalRules(JSON.parse(link.rules), req.headers['user-agent'] || '', countScans(link.id) - 1);
+      if (chosen) dest = chosen;
+    } catch { /* fall back to target */ }
+  }
+  res.redirect(302, dest);
 });
 
 // Public, unauthenticated QR matrix for the landing "forge" 3D preview (no link created).
@@ -566,6 +582,12 @@ function qrStyle(body, plan) {
   if (shapes.includes(s.module)) out.module = s.module;
   if (shapes.includes(s.eye)) out.eye = s.eye;
   return Object.keys(out).length ? out : null;
+}
+
+// Smart-routing rules are a Pro+ feature (gated on the analytics entitlement).
+function rulesFrom(body, plan) {
+  if (!planLimit(plan).analytics) return null;
+  return sanitizeRules(body && body.rules);
 }
 
 // Returns sanitized brand colors, but only if the plan allows branding; otherwise

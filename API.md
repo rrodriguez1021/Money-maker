@@ -31,6 +31,7 @@ DELETE /api/keys/:id                             → { revoked: true }
 ```
 GET    /api/links                                → { links: [...] }
 POST   /api/links         { target, title?, colorDark?, colorBg?, logo? }     → new redirect QR
+                          + rules:{type:'device',ios,android,default} | {type:'split',urls[]}  → smart routing (Pro)
 POST   /api/links         { page: { headline, subtitle?, buttons:[{label,url}] } }  → hosted-page QR
 PUT    /api/links/:id     { target?, title?, active?, page?, colorDark?, colorBg?, logo? }
 DELETE /api/links/:id

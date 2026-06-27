@@ -86,6 +86,8 @@ ensureColumn('links', 'logo', 'TEXT');
 ensureColumn('links', 'logo_shape', 'TEXT');
 // Extra QR styling as JSON (gradient, module shape, eye shape) — Business tier.
 ensureColumn('links', 'qr_style', 'TEXT');
+// Smart routing rules as JSON (device / A-B split) — Pro tier. Null = plain redirect.
+ensureColumn('links', 'rules', 'TEXT');
 
 // Plan limits — the core monetization lever. Adding the Business tier (branded
 // QR colors) lifts revenue per customer: $9 Pro → $29 Business.
@@ -177,6 +179,10 @@ export const setLinkLogo = (id, accountId, logo, shape = 'square') => setLogoStm
 // Set/clear extra QR styling (gradient/module/eye) as a JSON string or null.
 const setStyleStmt = db.prepare(`UPDATE links SET qr_style = ? WHERE id = ? AND account_id = ?`);
 export const setLinkStyle = (id, accountId, styleJson) => setStyleStmt.run(styleJson, id, accountId);
+
+// Set/clear smart-routing rules (device / split) as a JSON string or null.
+const setRulesStmt = db.prepare(`UPDATE links SET rules = ? WHERE id = ? AND account_id = ?`);
+export const setLinkRules = (id, accountId, rulesJson) => setRulesStmt.run(rulesJson, id, accountId);
 
 // --- API keys (programmatic access). Only the sha256 hash is stored. ---
 const insertApiKey = db.prepare(

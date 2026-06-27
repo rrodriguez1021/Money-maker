@@ -283,6 +283,44 @@ test('billing portal requires billing + a stripe customer', async () => {
   assert.equal(res.status, 503);
 });
 
+test('smart routing: device + A/B redirects, gated to Pro', async () => {
+  // Free plan: rules ignored.
+  const free = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'routefree@example.com' }),
+  }).then(j);
+  const FH = { 'Content-Type': 'application/json', Authorization: `Bearer ${free.token}` };
+  const fl = await fetch(`${base}/api/links`, { method: 'POST', headers: FH, body: JSON.stringify({ target: 'example.com/base', rules: { type: 'device', ios: 'apple.com/app' } }) }).then(j);
+  assert.equal(fl.rules, null, 'free plan cannot set rules');
+
+  // Pro: device routing.
+  const pro = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'routepro@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(pro.token).id, 'pro');
+  const PH = { 'Content-Type': 'application/json', Authorization: `Bearer ${pro.token}` };
+  const dev = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: PH, body: JSON.stringify({ target: 'example.com/site', rules: { type: 'device', ios: 'apps.apple.com/app', android: 'play.google.com/app' } }),
+  }).then(j);
+  assert.ok(dev.rules, 'rules stored for Pro');
+
+  const ios = await fetch(`${base}/r/${dev.id}`, { redirect: 'manual', headers: { 'user-agent': 'iPhone OS 17' } });
+  assert.equal(ios.headers.get('location'), 'https://apps.apple.com/app');
+  const android = await fetch(`${base}/r/${dev.id}`, { redirect: 'manual', headers: { 'user-agent': 'Android 14' } });
+  assert.equal(android.headers.get('location'), 'https://play.google.com/app');
+  const pc = await fetch(`${base}/r/${dev.id}`, { redirect: 'manual', headers: { 'user-agent': 'Windows' } });
+  assert.equal(pc.headers.get('location'), 'https://example.com/site'); // falls back to base target
+
+  // A/B split rotates across scans.
+  const ab = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: PH, body: JSON.stringify({ target: 'example.com/a', rules: { type: 'split', urls: ['example.com/a', 'example.com/b'] } }),
+  }).then(j);
+  const first = await fetch(`${base}/r/${ab.id}`, { redirect: 'manual' });
+  const second = await fetch(`${base}/r/${ab.id}`, { redirect: 'manual' });
+  assert.notEqual(first.headers.get('location'), second.headers.get('location'));
+});
+
 test('bulk delete removes only your own codes and cascades scans', async () => {
   const a = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
