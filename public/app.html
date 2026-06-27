@@ -18,12 +18,23 @@
   <!-- Sign in / up -->
   <div id="authPanel" class="panel" style="max-width:440px;margin:40px auto;">
     <h2 style="margin-top:0">Sign in to Qrysm</h2>
-    <p class="muted">Enter your email to get started. We'll create your account and issue an access token (kept in this browser).</p>
+    <p class="muted">Enter your email. New here? We'll create your account. Returning? We'll
+      send a secure sign-in link to your inbox.</p>
     <div class="row">
       <div class="field"><input id="email" type="email" placeholder="you@example.com" /></div>
       <button id="signupBtn" class="btn btn-primary">Continue →</button>
     </div>
     <p id="authErr" class="muted" style="color:var(--danger)"></p>
+    <p id="authMsg" class="muted hidden" style="color:var(--cyan)"></p>
+
+    <details id="keySignin" style="margin-top:14px">
+      <summary class="muted" style="cursor:pointer;font-size:13px">Have an access key? Sign in with it</summary>
+      <p class="muted" style="font-size:12px;margin:8px 0">Paste the access key shown when you created your account.</p>
+      <div class="row">
+        <div class="field"><input id="accessKey" type="password" placeholder="paste access key" autocomplete="off" /></div>
+        <button id="accessKeyBtn" class="btn">Sign in</button>
+      </div>
+    </details>
   </div>
 
   <!-- Main app -->
@@ -162,6 +173,7 @@
     <footer style="text-align:left;padding:10px 0">
       <p class="muted" style="font-size:13px">
         <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a> ·
+        <a href="#" id="copyKey">🔑 Copy access key (back it up)</a> ·
         <a href="#" id="deleteAccount" style="color:var(--danger)">Delete my account &amp; data</a>
       </p>
     </footer>

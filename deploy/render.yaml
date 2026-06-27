@@ -1,11 +1,16 @@
 # One-click deploy to Render.com: New > Blueprint > point at this repo.
-# Free web service + a persistent disk for the SQLite database.
+#
+# IMPORTANT: a persistent disk (where the SQLite database lives) requires a paid
+# instance — Render's FREE web services do NOT keep a disk, so on the free plan the
+# database is WIPED on every deploy/restart and customers' codes would go dead.
+# The "starter" plan (~$7/mo) is the minimum that persists data. Use free only for a
+# throwaway demo where losing all data on restart is acceptable.
 services:
   - type: web
     name: dynaqr
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: free
+    plan: starter
     healthCheckPath: /healthz
     envVars:
       - key: PORT

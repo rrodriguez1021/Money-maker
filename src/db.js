@@ -101,6 +101,22 @@ ensureColumn('links', 'track', 'INTEGER NOT NULL DEFAULT 0');
 // Which smart-routing branch a scan took (e.g. 'ios', 'V2', 'Lunch'). Null = none.
 ensureColumn('scans', 'variant', 'TEXT');
 
+// One-time, short-lived sign-in codes for magic-link login (hash stored, never the code).
+// And a ledger of processed Stripe event ids so webhook retries are idempotent.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS login_codes (
+    code_hash   TEXT PRIMARY KEY,
+    account_id  TEXT NOT NULL,
+    expires     INTEGER NOT NULL,
+    used        INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS stripe_events (
+    id          TEXT PRIMARY KEY,
+    ts          INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_scans_link_ts ON scans(link_id, ts);
+`);
+
 // Plan limits — the core monetization lever. Adding the Business tier (branded
 // QR colors) lifts revenue per customer: $9 Pro → $29 Business.
 export const PLAN_LIMITS = {
@@ -276,6 +292,41 @@ const convByVariantStmt = db.prepare(`SELECT variant, COUNT(*) AS n FROM convers
 export const recordConversion = (linkId, variant, ts) => insertConversion.run(linkId, variant || null, ts);
 export const countConversions = (linkId) => countConvStmt.get(linkId).n;
 export const conversionsByVariant = (linkId) => convByVariantStmt.all(linkId);
+
+// --- Magic-link sign-in codes (passwordless login that doesn't leak the token). ---
+const insertLoginCode = db.prepare(`INSERT INTO login_codes (code_hash, account_id, expires) VALUES (?, ?, ?)`);
+const getLoginCode = db.prepare(`SELECT * FROM login_codes WHERE code_hash = ?`);
+const useLoginCode = db.prepare(`UPDATE login_codes SET used = 1 WHERE code_hash = ?`);
+const pruneLoginCodes = db.prepare(`DELETE FROM login_codes WHERE expires < ?`);
+export function createLoginCode(codeHash, accountId, expires) {
+  insertLoginCode.run(codeHash, accountId, expires);
+}
+// Validate + single-use a login code. Returns the account id, or null if bad/expired/used.
+export function consumeLoginCode(codeHash, now) {
+  const row = getLoginCode.get(codeHash);
+  if (!row || row.used || row.expires < now) return null;
+  useLoginCode.run(codeHash);
+  pruneLoginCodes.run(now); // opportunistic cleanup
+  return row.account_id;
+}
+
+// --- Stripe webhook idempotency: record an event id once. Returns true if NEW. ---
+const insertStripeEvent = db.prepare(`INSERT OR IGNORE INTO stripe_events (id, ts) VALUES (?, ?)`);
+const deleteStripeEvent = db.prepare(`DELETE FROM stripe_events WHERE id = ?`);
+export function markStripeEvent(id, ts) {
+  return insertStripeEvent.run(id, ts).changes > 0;
+}
+// Release a claimed event id (used when handling failed, so Stripe's retry re-runs it).
+export function unmarkStripeEvent(id) {
+  deleteStripeEvent.run(id);
+}
+
+// Flush WAL to the main db file and close cleanly — called on graceful shutdown so
+// an auto-stopping host (Fly) or a redeploy can't leave a half-written database.
+export function closeDb() {
+  try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { /* best effort */ }
+  try { db.close(); } catch { /* already closed */ }
+}
 
 // Toggle conversion tracking for a code.
 const setTrackStmt = db.prepare(`UPDATE links SET track = ? WHERE id = ? AND account_id = ?`);

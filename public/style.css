@@ -291,6 +291,31 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
   .forge-stage { height: 360px; order: -1; }
 }
 
+/* --- Dashboard on phones: stack toolbars and link rows so nothing overflows. --- */
+@media (max-width: 680px) {
+  .nav { padding: 14px 16px; }
+  .nav nav { gap: 10px; }
+  .app { padding: 16px 14px 80px; }
+  .panel { padding: 16px; }
+
+  .appbar { flex-direction: column; align-items: stretch; gap: 14px; }
+  .appbar .row { justify-content: space-between; }
+
+  .field { min-width: 0; }            /* let inputs shrink to fit instead of overflowing */
+  .row { gap: 10px; }
+  input, select, textarea { max-width: 100%; }
+
+  /* Link rows: QR + details on top, scan count and actions on their own lines. */
+  .link-item { flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+  .link-main { flex: 1 1 60%; min-width: 0; }
+  .link-main .short, .link-main .small { overflow-wrap: anywhere; }
+  .link-item > div[style*="text-align"] { order: 3; }
+  .link-actions { order: 4; width: 100%; }
+  .link-actions .btn { flex: 1 1 auto; text-align: center; }
+
+  .bulk-bar { flex-wrap: wrap; }
+}
+
 /* ⌘K command palette */
 .kbd-chip { font-family: ui-monospace, monospace; letter-spacing: 1px; }
 .cmdk {

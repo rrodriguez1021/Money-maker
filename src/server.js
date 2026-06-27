@@ -19,7 +19,9 @@ import {
   findAccountByRefCode, setReferredBy, setRefCode, countReferrals, setLinkStyle,
   recordPageClick, clicksByButton, setLinkRules,
   recordConversion, countConversions, conversionsByVariant, setLinkTrack,
+  createLoginCode, consumeLoginCode, markStripeEvent, unmarkStripeEvent, closeDb,
 } from './db.js';
+import { emailEnabled, sendLoginLink } from './email.js';
 import { createHash } from 'node:crypto';
 import { sanitizePage, renderPage } from './page.js';
 import { qrPng, qrSvg, qrMatrix, isValidLogo, frameSvg } from './qrlogo.js';
@@ -38,7 +40,9 @@ const app = express();
 
 // Behind a hosting proxy (Render/Fly/Heroku) so req.ip and req.secure reflect the
 // real client and TLS, not the proxy hop. Enables correct rate-limiting + HSTS.
-app.set('trust proxy', true);
+// Trust a BOUNDED number of hops (default 1) rather than `true`: trusting every hop
+// lets a client spoof X-Forwarded-For to forge its IP and bypass rate limiting.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 app.disable('x-powered-by');
 
 // --- Security headers on every response. Conservative CSP that still allows the
@@ -75,7 +79,9 @@ const shortId = customAlphabet('346789ABCDEFGHJKLMNPQRTUVWXYabcdefghijkmnpqrtwxy
 const accountId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const tokenId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 40);
 const refId = customAlphabet('346789ABCDEFGHJKLMNPQRTUVWXYabcdefghijkmnpqrtwxyz', 8);
+const loginCodeId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 48);
 const now = () => Date.now();
+const LOGIN_CODE_TTL = 15 * 60 * 1000; // magic links expire after 15 minutes
 
 function baseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || req.protocol;
@@ -100,11 +106,14 @@ function emitScan(accountId, payload) {
 }
 
 // --- Stripe webhook must read the RAW body, so register it before json parser. ---
-app.post('/webhook/stripe', express.raw({ type: 'application/json' }), (req, res) => {
+app.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const event = constructEvent(req.body, req.headers['stripe-signature']);
   if (!event) return res.status(400).send('invalid');
+  // Idempotency: Stripe retries until it gets a 2xx, and may deliver duplicates.
+  // Skip any event id we've already applied so a retry can't double-process.
+  if (!markStripeEvent(event.id, now())) return res.json({ received: true, duplicate: true });
 
-  (async () => {
+  try {
     const customer = await customerIdFromEvent(event);
     if (event.type === 'checkout.session.completed') {
       const s = event.data.object;
@@ -117,9 +126,13 @@ app.post('/webhook/stripe', express.raw({ type: 'application/json' }), (req, res
       const sub = event.data.object;
       if (customer) setPlanForCustomer(customer, sub.status === 'active' ? planForSubscription(sub) : 'free');
     }
-  })().catch((e) => console.error('webhook handler error', e));
-
-  res.json({ received: true });
+    // Only acknowledge after the plan change is committed.
+    res.json({ received: true });
+  } catch (e) {
+    console.error('webhook handler error', e);
+    unmarkStripeEvent(event.id); // release the claim so Stripe's retry re-runs it
+    res.status(500).json({ error: 'webhook_failed' }); // 500 → Stripe retries later
+  }
 });
 
 // 1MB cap: well above a 300KB logo data URL, but stops oversized-payload abuse.
@@ -147,11 +160,34 @@ function auth(req, res, next) {
   next();
 }
 
-app.post('/api/signup', signupLimiter, (req, res) => {
+// Issue (or look up) a magic sign-in link for an account and deliver it. Never
+// returns the token in the HTTP response — it goes only to the account's inbox
+// (or the server log when email is disabled), so knowing an email can't grant access.
+async function sendMagicLink(account, req) {
+  const code = loginCodeId();
+  createLoginCode(sha256(code), account.id, now() + LOGIN_CODE_TTL);
+  const url = `${baseUrl(req)}/api/login/verify?code=${code}`;
+  const emailed = await sendLoginLink(account.email, url);
+  return { emailed };
+}
+
+app.post('/api/signup', signupLimiter, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'invalid_email' });
   const existing = findAccountByEmail(email);
-  if (existing) return res.json({ token: existing.token, plan: existing.plan, returning: true });
+  if (existing) {
+    // SECURITY: an existing email must NOT hand back the token. Send a sign-in link
+    // to the inbox instead (the only proof of ownership), and tell the client to
+    // either check email or paste their saved access key.
+    try {
+      const { emailed } = await sendMagicLink(existing, req);
+      return res.json({ returning: true, emailed, emailEnabled });
+    } catch (e) {
+      console.error('magic link send failed', e);
+      return res.status(500).json({ error: 'email_failed' });
+    }
+  }
+  // Brand-new account: no data exists yet, so it's safe to return the token once.
   const acct = createAccount(accountId(), email, tokenId(), now(), refId());
   // Attribute the signup to a referrer if a valid ?ref code was passed through.
   const ref = String(req.body.ref || '').trim();
@@ -160,6 +196,33 @@ app.post('/api/signup', signupLimiter, (req, res) => {
     if (referrer && referrer.id !== acct.id) setReferredBy(acct.id, referrer.id);
   }
   res.json({ token: acct.token, plan: acct.plan, returning: false });
+});
+
+// Request a sign-in link for an existing account (returning users / new devices).
+app.post('/api/login', signupLimiter, async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'invalid_email' });
+  const account = findAccountByEmail(email);
+  // Always respond the same way so this can't be used to probe which emails exist.
+  if (!account) return res.json({ sent: true, emailEnabled });
+  try {
+    const { emailed } = await sendMagicLink(account, req);
+    res.json({ sent: true, emailed, emailEnabled });
+  } catch (e) {
+    console.error('magic link send failed', e);
+    res.status(500).json({ error: 'email_failed' });
+  }
+});
+
+// Consume a magic-link code and hand the browser its token via the URL fragment
+// (fragments are never sent to servers/proxies, so the token stays out of logs).
+app.get('/api/login/verify', signupLimiter, (req, res) => {
+  const code = String(req.query.code || '');
+  const accountId = code ? consumeLoginCode(sha256(code), now()) : null;
+  if (!accountId) return res.status(400).sendFile(join(__dirname, '..', 'public', '404.html'));
+  const account = findAccountById(accountId);
+  if (!account) return res.status(400).sendFile(join(__dirname, '..', 'public', '404.html'));
+  res.redirect(302, `/app#t=${encodeURIComponent(account.token)}`);
 });
 
 app.get('/api/me', auth, (req, res) => {
@@ -176,6 +239,7 @@ app.get('/api/me', auth, (req, res) => {
     billingEnabled,
     businessBillingEnabled,
     annualBillingEnabled,
+    emailEnabled,
   });
 });
 
@@ -622,6 +686,22 @@ app.get('/app', (req, res) => res.sendFile(join(__dirname, '..', 'public', 'app.
 
 app.use(express.static(join(__dirname, '..', 'public')));
 
+// Catch-all error handler: a thrown/async error in any route lands here instead of
+// hanging the request or leaking a stack trace to the client. Body-parse failures
+// (e.g. a payload over the 1mb cap) surface as a clean 400/413.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({ error: 'payload_too_large', hint: 'Request body exceeds 1MB.' });
+  }
+  if (err && (err.type === 'entity.parse.failed' || err.status === 400)) {
+    return res.status(400).json({ error: 'bad_request', hint: 'Invalid request body.' });
+  }
+  console.error('unhandled route error', err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: 'server_error' });
+});
+
 // Build RFC-4180-ish CSV. Quotes fields and escapes embedded quotes; prefixes a
 // leading =/+/-/@ with a quote to defuse spreadsheet formula injection.
 function toCsv(header, rows) {
@@ -690,9 +770,28 @@ function normalizeUrl(input) {
 
 // Don't auto-listen when imported by tests.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`Qrysm listening on :${PORT}  (billing ${billingEnabled ? 'ENABLED' : 'disabled — demo mode'})`);
   });
+
+  // Graceful shutdown: stop taking new connections, then flush + close the database
+  // so an auto-stopping host or a redeploy can't corrupt the SQLite/WAL files.
+  let shuttingDown = false;
+  const shutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n${signal} received — shutting down cleanly…`);
+    // Close live SSE streams so the server can actually stop.
+    for (const set of sseClients.values()) for (const res of set) { try { res.end(); } catch {} }
+    server.close(() => { closeDb(); process.exit(0); });
+    // Hard cap so a stuck connection can't block shutdown forever.
+    setTimeout(() => { closeDb(); process.exit(0); }, 8000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  // Last-resort guards so one stray rejection can't silently wedge the process.
+  process.on('unhandledRejection', (reason) => console.error('unhandledRejection', reason));
+  process.on('uncaughtException', (err) => console.error('uncaughtException', err));
 }
 
 export { app, normalizeUrl };

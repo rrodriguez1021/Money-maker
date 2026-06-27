@@ -1,6 +1,15 @@
 // Qrysm dashboard — talks to the JSON API using a token kept in localStorage.
 const $ = (s) => document.querySelector(s);
 const TOKEN_KEY = 'dynaqr_token';
+// A magic sign-in link drops the token in the URL fragment (#t=…), which browsers
+// never send to servers. Capture it, persist it, then scrub it from the address bar.
+(function captureMagicToken() {
+  const m = location.hash.match(/[#&]t=([^&]+)/);
+  if (m) {
+    localStorage.setItem(TOKEN_KEY, decodeURIComponent(m[1]));
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+})();
 let token = localStorage.getItem(TOKEN_KEY);
 let me = null;
 
@@ -38,17 +47,48 @@ async function api(path, opts = {}) {
 $('#signupBtn').onclick = async () => {
   const email = $('#email').value.trim();
   $('#authErr').textContent = '';
+  $('#authMsg').classList.add('hidden');
   try {
     const ref = localStorage.getItem('dynaqr_ref') || undefined;
     const r = await api('/api/signup', { method: 'POST', body: JSON.stringify({ email, ref }) });
-    token = r.token;
-    localStorage.setItem(TOKEN_KEY, token);
-    await boot();
+    if (r.token) {
+      // Brand-new account.
+      token = r.token;
+      localStorage.setItem(TOKEN_KEY, token);
+      await boot();
+    } else if (r.returning) {
+      // Existing account — we never hand back the token; a sign-in link was sent.
+      const msg = r.emailed
+        ? `You already have an account. We've emailed a secure sign-in link to ${email}.`
+        : `You already have an account. A sign-in link was generated — check the server logs, or use your access key below.`;
+      $('#authMsg').textContent = msg;
+      $('#authMsg').classList.remove('hidden');
+      $('#keySignin').open = !r.emailed;
+    }
   } catch (e) {
-    $('#authErr').textContent = e.data?.error === 'invalid_email' ? 'Please enter a valid email.' : 'Something went wrong.';
+    $('#authErr').textContent = e.data?.error === 'invalid_email' ? 'Please enter a valid email.'
+      : e.data?.error === 'email_failed' ? "Couldn't send the sign-in email. Try your access key below."
+      : 'Something went wrong.';
   }
 };
 $('#email').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#signupBtn').click(); });
+
+// Sign in by pasting a saved access key (works with no email provider configured).
+$('#accessKeyBtn').onclick = async () => {
+  const key = $('#accessKey').value.trim();
+  if (!key) return;
+  $('#authErr').textContent = '';
+  token = key;
+  try {
+    me = await api('/api/me'); // validate before persisting
+    localStorage.setItem(TOKEN_KEY, token);
+    await boot();
+  } catch {
+    token = null;
+    $('#authErr').textContent = 'That access key is not valid.';
+  }
+};
+$('#accessKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#accessKeyBtn').click(); });
 
 $('#logout').onclick = (e) => {
   e.preventDefault();
@@ -602,6 +642,22 @@ async function showStats(l, el) {
     else toast('Could not load stats', true);
   }
 }
+
+// --- Back up the access key: copy the token so a user can sign in on another device ---
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'copyKey') {
+    e.preventDefault();
+    const key = localStorage.getItem(TOKEN_KEY) || '';
+    if (!key) return toast('No access key found in this browser', true);
+    try {
+      await navigator.clipboard.writeText(key);
+      toast('Access key copied — store it somewhere safe to sign in elsewhere.');
+    } catch {
+      // Clipboard blocked (e.g. insecure context): show it so the user can copy manually.
+      prompt('Your access key — copy and store it safely:', key);
+    }
+  }
+});
 
 // --- GDPR: delete account and all associated data ---
 document.addEventListener('click', (e) => {

@@ -46,6 +46,30 @@ test('rejects invalid email', async () => {
   assert.equal(res.status, 400);
 });
 
+test('signing up an existing email never leaks the token (no account takeover)', async () => {
+  const email = 'takeover@example.com';
+  const first = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  }).then(j);
+  assert.ok(first.token, 'first signup issues a token');
+  // A second signup with the same email must NOT return the token — it sends a link.
+  const second = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  }).then(j);
+  assert.equal(second.token, undefined, 'no token returned for an existing account');
+  assert.equal(second.returning, true);
+});
+
+test('login endpoint does not reveal whether an email exists', async () => {
+  const res = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'nobody-here@example.com' }),
+  }).then(j);
+  assert.equal(res.sent, true, 'responds the same for unknown emails');
+});
+
 test('full link lifecycle: create, redirect+scan, edit, stats gating', async () => {
   const { token } = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
