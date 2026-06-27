@@ -14,7 +14,7 @@ import {
   createAccount, findAccountByToken, findAccountByEmail, findAccountById,
   setPlan, setPlanForCustomer, planLimit,
   createLink, findLink, listLinks, countLinks, updateLink, deleteLink, setLinkPage, setLinkLogo,
-  recordScan, countScans, lastScanAt, recentScans, dailyScans, deleteAccount,
+  recordScan, countScans, lastScanAt, recentScans, dailyScans, variantBreakdown, deleteAccount,
   createApiKey, listApiKeys, findApiKeyByHash, revokeApiKey, touchApiKey,
   findAccountByRefCode, setReferredBy, setRefCode, countReferrals, setLinkStyle,
   recordPageClick, clicksByButton, setLinkRules,
@@ -438,6 +438,7 @@ app.get('/api/links/:id/stats', auth, (req, res) => {
     daily: dailyScans(link.id, since).map((d) => ({ date: new Date(d.day * 86400000).toISOString().slice(0, 10), scans: d.n })),
     recent: recentScans(link.id, 25).map((s) => ({ ts: s.ts, referrer: s.referrer, userAgent: s.user_agent })),
     buttonClicks,
+    routing: variantBreakdown(link.id).map((v) => ({ name: v.variant, scans: v.n })),
     ...summarizeScans(recentScans(link.id, 1000000)),
   });
 });
@@ -503,27 +504,27 @@ app.get('/r/:id', (req, res) => {
   const link = findLink(req.params.id);
   if (!link || !link.active) return res.status(404).sendFile(join(__dirname, '..', 'public', '404.html'));
   const ts = now();
-  recordScan(link.id, ts, req.headers.referer || req.headers.referrer, req.headers['user-agent']);
+  const ua = req.headers['user-agent'] || '';
+  // Smart routing: choose a destination (and record which variant) before logging.
+  let dest = link.target, variant = null;
+  if (!link.page_json && link.rules) {
+    try {
+      const chosen = evalRules(JSON.parse(link.rules), { ua, scanIndex: countScans(link.id), now: ts });
+      if (chosen) { variant = chosen.variant; if (chosen.dest) dest = chosen.dest; }
+    } catch { /* fall back to target */ }
+  }
+  recordScan(link.id, ts, req.headers.referer || req.headers.referrer, ua, variant);
   emitScan(link.account_id, { linkId: link.id, title: link.title, ts });
   // Hosted-page links render an HTML page; everything else 302-redirects.
   if (link.page_json) {
     try {
       const page = JSON.parse(link.page_json);
-      // "Made with Qrysm" footer carries the owner's referral code → organic growth.
       const owner = findAccountById(link.account_id);
       const homeUrl = owner && owner.ref_code ? `${baseUrl(req)}/?ref=${owner.ref_code}` : baseUrl(req);
       return res.type('html').send(renderPage(page, { title: link.title, homeUrl, pageUrl: `${baseUrl(req)}/r/${link.id}` }));
     } catch {
       return res.status(500).send('page error');
     }
-  }
-  // Smart routing: pick a destination by device or A/B split; else the base target.
-  let dest = link.target;
-  if (link.rules) {
-    try {
-      const chosen = evalRules(JSON.parse(link.rules), req.headers['user-agent'] || '', countScans(link.id) - 1);
-      if (chosen) dest = chosen;
-    } catch { /* fall back to target */ }
   }
   res.redirect(302, dest);
 });

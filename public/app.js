@@ -564,6 +564,7 @@ async function showStats(l, el) {
         ${breakdown('Devices', s.devices)}
         ${breakdown('Browsers', s.browsers)}
         ${breakdown('Top referrers', s.referrers)}
+        ${s.routing && s.routing.length ? breakdown('Smart routing', s.routing) : ''}
         ${s.buttonClicks && s.buttonClicks.length ? breakdown('Button clicks', s.buttonClicks.map((b) => ({ name: b.label, scans: b.clicks }))) : ''}
       </div>`;
     el.after(box);
@@ -601,11 +602,23 @@ function currentRules() {
     if (urls.length < 2) return null;
     return { type: 'split', urls };
   }
+  if (mode === 'time') {
+    const tzHours = parseFloat($('#routeTz').value) || 0;
+    const windows = [...document.querySelectorAll('#routeWindows .tw-row')].map((r) => ({
+      start: r.querySelector('.tw-start').value.trim(),
+      end: r.querySelector('.tw-end').value.trim(),
+      url: r.querySelector('.tw-url').value.trim(),
+      label: r.querySelector('.tw-label').value.trim(),
+    })).filter((w) => w.start && w.end && w.url);
+    if (!windows.length) return null;
+    return { type: 'time', tz: Math.round(tzHours * 60), windows, default: $('#target').value.trim() };
+  }
   return null;
 }
 document.getElementById('routeMode')?.addEventListener('change', (e) => {
   document.getElementById('routeDevice').classList.toggle('hidden', e.target.value !== 'device');
   document.getElementById('routeSplit').classList.toggle('hidden', e.target.value !== 'split');
+  document.getElementById('routeTime').classList.toggle('hidden', e.target.value !== 'time');
 });
 
 // Live branded-QR preview (Business): re-renders as colors/logo/shape change.

@@ -88,6 +88,8 @@ ensureColumn('links', 'logo_shape', 'TEXT');
 ensureColumn('links', 'qr_style', 'TEXT');
 // Smart routing rules as JSON (device / A-B split) — Pro tier. Null = plain redirect.
 ensureColumn('links', 'rules', 'TEXT');
+// Which smart-routing branch a scan took (e.g. 'ios', 'V2', 'Lunch'). Null = none.
+ensureColumn('scans', 'variant', 'TEXT');
 
 // Plan limits — the core monetization lever. Adding the Business tier (branded
 // QR colors) lifts revenue per customer: $9 Pro → $29 Business.
@@ -230,7 +232,7 @@ export function deleteAccount(accountId) {
 
 // --- Scans ---
 const insertScan = db.prepare(
-  `INSERT INTO scans (link_id, ts, referrer, user_agent) VALUES (?, ?, ?, ?)`
+  `INSERT INTO scans (link_id, ts, referrer, user_agent, variant) VALUES (?, ?, ?, ?, ?)`
 );
 const countScansStmt = db.prepare(`SELECT COUNT(*) AS n FROM scans WHERE link_id = ?`);
 const recentScansStmt = db.prepare(`SELECT * FROM scans WHERE link_id = ? ORDER BY ts DESC LIMIT ?`);
@@ -240,8 +242,12 @@ const dailyScansStmt = db.prepare(`
   GROUP BY day ORDER BY day ASC
 `);
 
-export const recordScan = (linkId, ts, referrer, userAgent) =>
-  insertScan.run(linkId, ts, referrer || null, userAgent || null);
+export const recordScan = (linkId, ts, referrer, userAgent, variant = null) =>
+  insertScan.run(linkId, ts, referrer || null, userAgent || null, variant || null);
+const variantBreakdownStmt = db.prepare(
+  `SELECT variant, COUNT(*) AS n FROM scans WHERE link_id = ? AND variant IS NOT NULL GROUP BY variant ORDER BY n DESC`
+);
+export const variantBreakdown = (linkId) => variantBreakdownStmt.all(linkId);
 
 // --- Hosted-page button clicks ---
 const insertClick = db.prepare(`INSERT INTO page_clicks (link_id, btn, ts) VALUES (?, ?, ?)`);

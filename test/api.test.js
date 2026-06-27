@@ -312,13 +312,38 @@ test('smart routing: device + A/B redirects, gated to Pro', async () => {
   const pc = await fetch(`${base}/r/${dev.id}`, { redirect: 'manual', headers: { 'user-agent': 'Windows' } });
   assert.equal(pc.headers.get('location'), 'https://example.com/site'); // falls back to base target
 
-  // A/B split rotates across scans.
+  // A/B split rotates across scans, and per-variant analytics are recorded.
   const ab = await fetch(`${base}/api/links`, {
     method: 'POST', headers: PH, body: JSON.stringify({ target: 'example.com/a', rules: { type: 'split', urls: ['example.com/a', 'example.com/b'] } }),
   }).then(j);
   const first = await fetch(`${base}/r/${ab.id}`, { redirect: 'manual' });
   const second = await fetch(`${base}/r/${ab.id}`, { redirect: 'manual' });
   assert.notEqual(first.headers.get('location'), second.headers.get('location'));
+
+  const stats = await fetch(`${base}/api/links/${ab.id}/stats`, { headers: PH }).then(j);
+  const byVariant = Object.fromEntries(stats.routing.map((r) => [r.name, r.scans]));
+  assert.equal(byVariant.V1, 1);
+  assert.equal(byVariant.V2, 1);
+});
+
+test('smart routing: time/schedule windows route by clock (Pro)', async () => {
+  const pro = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'routetime@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(pro.token).id, 'pro');
+  const PH = { 'Content-Type': 'application/json', Authorization: `Bearer ${pro.token}` };
+  // A window covering the whole day → every scan routes there.
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: PH, body: JSON.stringify({
+      target: 'example.com/closed',
+      rules: { type: 'time', tz: 0, windows: [{ start: '00:00', end: '23:59', url: 'example.com/open', label: 'AllDay' }] },
+    }),
+  }).then(j);
+  const r = await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
+  assert.equal(r.headers.get('location'), 'https://example.com/open');
+  const stats = await fetch(`${base}/api/links/${link.id}/stats`, { headers: PH }).then(j);
+  assert.ok(stats.routing.some((v) => v.name === 'AllDay'));
 });
 
 test('bulk delete removes only your own codes and cascades scans', async () => {

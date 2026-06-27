@@ -106,6 +106,7 @@
             <option value="">Off (single destination)</option>
             <option value="device">By device · iOS / Android</option>
             <option value="split">A/B split · rotate URLs</option>
+            <option value="time">By time · schedule</option>
           </select>
           <div id="routeDevice" class="hidden" style="margin-top:10px">
             <div class="row">
@@ -118,6 +119,15 @@
             <label>Rotate evenly across these URLs (one per line)</label>
             <textarea id="routeUrls" rows="3" placeholder="example.com/variant-a&#10;example.com/variant-b"
               style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 14px;font:inherit"></textarea>
+          </div>
+          <div id="routeTime" class="hidden" style="margin-top:10px">
+            <div><label>Timezone (UTC offset in hours, e.g. -5 for New York)</label><input id="routeTz" type="number" step="0.5" value="0" style="width:160px" /></div>
+            <label style="margin-top:8px">Time windows — start, end (24h), URL, label</label>
+            <div id="routeWindows">
+              <div class="row tw-row" style="margin-bottom:6px"><input class="tw-start" placeholder="11:00" style="width:90px" /><input class="tw-end" placeholder="15:00" style="width:90px" /><input class="tw-url" placeholder="example.com/lunch" /><input class="tw-label" placeholder="Lunch" style="width:120px" /></div>
+              <div class="row tw-row" style="margin-bottom:6px"><input class="tw-start" placeholder="15:00" style="width:90px" /><input class="tw-end" placeholder="22:00" style="width:90px" /><input class="tw-url" placeholder="example.com/dinner" /><input class="tw-label" placeholder="Dinner" style="width:120px" /></div>
+            </div>
+            <p class="muted" style="font-size:12px;margin:6px 0 0">Outside every window, the Destination URL above is used.</p>
           </div>
         </div>
       </details>

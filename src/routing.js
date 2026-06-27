@@ -12,6 +12,15 @@ function normalizeUrl(input) {
   } catch { return null; }
 }
 
+function hhmmToMin(v) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim());
+  if (!m) return null;
+  const h = +m[1], min = +m[2];
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+function minLabel(m) { return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
+
 export function sanitizeRules(input) {
   if (!input || typeof input !== 'object') return null;
   if (input.type === 'device') {
@@ -24,6 +33,16 @@ export function sanitizeRules(input) {
     if (urls.length < 2) return null;
     return { type: 'split', urls };
   }
+  if (input.type === 'time') {
+    const tz = Number.isFinite(+input.tz) ? Math.max(-720, Math.min(840, Math.trunc(+input.tz))) : 0;
+    const windows = (Array.isArray(input.windows) ? input.windows : []).map((w) => {
+      const start = hhmmToMin(w && w.start), end = hhmmToMin(w && w.end), url = normalizeUrl(w && w.url);
+      if (start == null || end == null || end <= start || !url) return null;
+      return { start, end, url, label: String((w && w.label) || '').slice(0, 24) };
+    }).filter(Boolean).slice(0, 6);
+    if (!windows.length) return null;
+    return { type: 'time', tz, windows, default: normalizeUrl(input.default) || null };
+  }
   return null;
 }
 
@@ -33,19 +52,35 @@ export function deviceOf(ua = '') {
   return 'other';
 }
 
-// Returns the chosen destination, or null to fall back to the link's base target.
-export function evalRules(rules, ua, scanIndex = 0) {
+// minute-of-day (0..1439) for a timestamp shifted by a UTC offset (minutes).
+function minuteOfDay(ts, tzOffsetMin = 0) {
+  const d = new Date(ts || 0);
+  let m = d.getUTCHours() * 60 + d.getUTCMinutes() + tzOffsetMin;
+  return ((m % 1440) + 1440) % 1440;
+}
+
+// Returns { dest, variant } for a scan, or null to fall back to the base target.
+// ctx: { ua, scanIndex, now }
+export function evalRules(rules, ctx = {}) {
+  const { ua = '', scanIndex = 0, now = 0 } = ctx;
   if (!rules) return null;
   if (rules.type === 'device') {
     const d = deviceOf(ua);
-    if (d === 'ios') return rules.ios || rules.default;
-    if (d === 'android') return rules.android || rules.default;
-    return rules.default;
+    const dest = d === 'ios' ? (rules.ios || rules.default) : d === 'android' ? (rules.android || rules.default) : rules.default;
+    return { dest: dest || null, variant: d };
   }
   if (rules.type === 'split') {
     const n = rules.urls.length;
     if (!n) return null;
-    return rules.urls[(((scanIndex % n) + n) % n)];
+    const i = (((scanIndex % n) + n) % n);
+    return { dest: rules.urls[i], variant: 'V' + (i + 1) };
+  }
+  if (rules.type === 'time') {
+    const m = minuteOfDay(now, rules.tz || 0);
+    for (const w of rules.windows) {
+      if (m >= w.start && m < w.end) return { dest: w.url, variant: w.label || `${minLabel(w.start)}–${minLabel(w.end)}` };
+    }
+    return { dest: rules.default || null, variant: 'default' };
   }
   return null;
 }
