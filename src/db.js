@@ -100,6 +100,9 @@ ensureColumn('links', 'rules', 'TEXT');
 ensureColumn('links', 'track', 'INTEGER NOT NULL DEFAULT 0');
 // Which smart-routing branch a scan took (e.g. 'ios', 'V2', 'Lunch'). Null = none.
 ensureColumn('scans', 'variant', 'TEXT');
+// Scanner country (2-letter ISO code only — derived from a CDN/proxy header, never
+// the IP, which we don't store). Null = unknown / no geo header present.
+ensureColumn('scans', 'country', 'TEXT');
 
 // One-time, short-lived sign-in codes for magic-link login (hash stored, never the code).
 // And a ledger of processed Stripe event ids so webhook retries are idempotent.
@@ -262,7 +265,7 @@ export function deleteAccount(accountId) {
 
 // --- Scans ---
 const insertScan = db.prepare(
-  `INSERT INTO scans (link_id, ts, referrer, user_agent, variant) VALUES (?, ?, ?, ?, ?)`
+  `INSERT INTO scans (link_id, ts, referrer, user_agent, variant, country) VALUES (?, ?, ?, ?, ?, ?)`
 );
 const countScansStmt = db.prepare(`SELECT COUNT(*) AS n FROM scans WHERE link_id = ?`);
 const recentScansStmt = db.prepare(`SELECT * FROM scans WHERE link_id = ? ORDER BY ts DESC LIMIT ?`);
@@ -272,12 +275,16 @@ const dailyScansStmt = db.prepare(`
   GROUP BY day ORDER BY day ASC
 `);
 
-export const recordScan = (linkId, ts, referrer, userAgent, variant = null) =>
-  insertScan.run(linkId, ts, referrer || null, userAgent || null, variant || null);
+export const recordScan = (linkId, ts, referrer, userAgent, variant = null, country = null) =>
+  insertScan.run(linkId, ts, referrer || null, userAgent || null, variant || null, country || null);
 const variantBreakdownStmt = db.prepare(
   `SELECT variant, COUNT(*) AS n FROM scans WHERE link_id = ? AND variant IS NOT NULL GROUP BY variant ORDER BY n DESC`
 );
 export const variantBreakdown = (linkId) => variantBreakdownStmt.all(linkId);
+const countryBreakdownStmt = db.prepare(
+  `SELECT country, COUNT(*) AS n FROM scans WHERE link_id = ? AND country IS NOT NULL GROUP BY country ORDER BY n DESC LIMIT 30`
+);
+export const countryBreakdown = (linkId) => countryBreakdownStmt.all(linkId);
 
 // --- Hosted-page button clicks ---
 const insertClick = db.prepare(`INSERT INTO page_clicks (link_id, btn, ts) VALUES (?, ?, ?)`);

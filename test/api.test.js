@@ -396,6 +396,33 @@ test('conversion tracking: redirect tags the URL, pixel records, stats show rate
   assert.equal(bad.status, 200);
 });
 
+test('geo: a country header is recorded and surfaces in stats locations', async () => {
+  const pro = await fetch(`${base}/api/signup`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'geo@example.com' }),
+  }).then(j);
+  setPlan(findAccountByToken(pro.token).id, 'pro');
+  const PH = { 'Content-Type': 'application/json', Authorization: `Bearer ${pro.token}` };
+  const link = await fetch(`${base}/api/links`, {
+    method: 'POST', headers: PH, body: JSON.stringify({ target: 'example.com/geo' }),
+  }).then(j);
+
+  // Two scans from the US (Cloudflare-style header), one from Canada, one with no header.
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual', headers: { 'cf-ipcountry': 'US' } });
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual', headers: { 'cf-ipcountry': 'us' } });
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual', headers: { 'x-vercel-ip-country': 'CA' } });
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual' });
+  // A placeholder country code (Cloudflare uses XX for unknown) must be ignored.
+  await fetch(`${base}/r/${link.id}`, { redirect: 'manual', headers: { 'cf-ipcountry': 'XX' } });
+
+  const stats = await fetch(`${base}/api/links/${link.id}/stats`, { headers: PH }).then(j);
+  const us = stats.locations.find((c) => c.name === 'US');
+  const ca = stats.locations.find((c) => c.name === 'CA');
+  assert.equal(us.scans, 2, 'two US scans (case-insensitive)');
+  assert.equal(ca.scans, 1, 'one CA scan');
+  assert.ok(!stats.locations.some((c) => c.name === 'XX'), 'placeholder code not stored');
+});
+
 test('smart routing: time/schedule windows route by clock (Pro)', async () => {
   const pro = await fetch(`${base}/api/signup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

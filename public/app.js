@@ -39,6 +39,10 @@ async function api(path, opts = {}) {
     },
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 429) {
+    const wait = res.headers.get('Retry-After');
+    toast(`You're going a little fast — try again${wait ? ` in ${wait}s` : ' in a moment'}.`, true);
+  }
   if (!res.ok) throw Object.assign(new Error(data.error || 'error'), { data, status: res.status });
   return data;
 }
@@ -630,6 +634,7 @@ async function showStats(l, el) {
       ${convLine}
       <div class="bars">${bars || '<span class="muted">no scans yet</span>'}</div>
       <div class="breakdowns">
+        ${breakdown('Locations', (s.locations || []).map((c) => ({ name: countryLabel(c.name), scans: c.scans })))}
         ${breakdown('Devices', s.devices)}
         ${breakdown('Browsers', s.browsers)}
         ${breakdown('Top referrers', s.referrers)}
@@ -766,6 +771,21 @@ function readLogoFile() {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Turn a 2-letter country code into "🇺🇸 United States" (flag via regional-indicator
+// letters, name via Intl — no data tables needed). Falls back to the raw code.
+let _countryNames = null;
+function countryLabel(cc) {
+  if (!cc || !/^[A-Za-z]{2}$/.test(cc)) return cc || 'Unknown';
+  const code = cc.toUpperCase();
+  const flag = String.fromCodePoint(...[...code].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
+  try {
+    _countryNames = _countryNames || new Intl.DisplayNames(['en'], { type: 'region' });
+    return `${flag} ${_countryNames.of(code) || code}`;
+  } catch {
+    return `${flag} ${code}`;
+  }
 }
 
 function timeAgo(ts) {

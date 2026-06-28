@@ -20,6 +20,7 @@ import {
   recordPageClick, clicksByButton, setLinkRules,
   recordConversion, countConversions, conversionsByVariant, setLinkTrack,
   createLoginCode, consumeLoginCode, markStripeEvent, unmarkStripeEvent, closeDb,
+  countryBreakdown,
 } from './db.js';
 import { emailEnabled, sendLoginLink } from './email.js';
 import { createHash } from 'node:crypto';
@@ -86,6 +87,19 @@ const LOGIN_CODE_TTL = 15 * 60 * 1000; // magic links expire after 15 minutes
 function baseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || req.protocol;
   return process.env.PUBLIC_URL || `${proto}://${req.get('host')}`;
+}
+
+// Best-effort scanner country (2-letter ISO) from a CDN/proxy header — we never read
+// or store the IP. Works automatically behind Cloudflare/Vercel/Fly; null otherwise.
+function countryOf(req) {
+  const raw = req.headers['cf-ipcountry']            // Cloudflare
+    || req.headers['x-vercel-ip-country']            // Vercel
+    || req.headers['x-country-code']                 // generic / some proxies
+    || req.headers['fly-client-country']             // Fly (when enabled)
+    || '';
+  const cc = String(raw).trim().toUpperCase();
+  // Two A–Z letters only; ignore Cloudflare's "XX"/"T1" placeholders.
+  return /^[A-Z]{2}$/.test(cc) && cc !== 'XX' && cc !== 'T1' ? cc : null;
 }
 
 // --- Real-time scan stream (Server-Sent Events). accountId → set of live clients. ---
@@ -550,6 +564,7 @@ app.get('/api/links/:id/stats', auth, (req, res) => {
     recent: recentScans(link.id, 25).map((s) => ({ ts: s.ts, referrer: s.referrer, userAgent: s.user_agent })),
     buttonClicks,
     routing: variantBreakdown(link.id).map((v) => ({ name: v.variant, scans: v.n })),
+    locations: countryBreakdown(link.id).map((c) => ({ name: c.country, scans: c.n })),
     ...summarizeScans(recentScans(link.id, 1000000)),
   });
 });
@@ -624,7 +639,7 @@ app.get('/r/:id', publicLimiter, (req, res) => {
       if (chosen) { variant = chosen.variant; if (chosen.dest) dest = chosen.dest; }
     } catch { /* fall back to target */ }
   }
-  recordScan(link.id, ts, req.headers.referer || req.headers.referrer, ua, variant);
+  recordScan(link.id, ts, req.headers.referer || req.headers.referrer, ua, variant, countryOf(req));
   emitScan(link.account_id, { linkId: link.id, title: link.title, ts });
   // Hosted-page links render an HTML page; everything else 302-redirects.
   if (link.page_json) {

@@ -65,7 +65,9 @@
   <ul>
     <li>a timestamp,</li>
     <li>the referring URL (if the browser sends one),</li>
-    <li>the browser/device user-agent string.</li>
+    <li>the browser/device user-agent string,</li>
+    <li>an approximate <strong>country</strong> (2-letter code only), derived from a network/CDN
+    header where available — we do <em>not</em> read or store the IP address it came from.</li>
   </ul>
   <p>We do <strong>not</strong> use third-party advertising trackers, and we do not store the
   full IP address of scanners in this build. If you (the account owner) enable additional
